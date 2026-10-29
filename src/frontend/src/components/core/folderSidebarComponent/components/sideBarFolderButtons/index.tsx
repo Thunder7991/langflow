@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useParams } from "react-router-dom";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
+import SidebarAccountActions from "@/components/core/sidebarAccountActions";
 import {
   Sidebar,
   SidebarContent,
@@ -604,48 +605,41 @@ const SideBarFoldersButtonsComponent = ({
           </div>
         )}
       </SidebarContent>
-      {(projectSidebar.footer || ENABLE_FILE_MANAGEMENT) && (
-        <SidebarFooter
-          className={cn("border-t", projectSidebar.footerClassName)}
+      <SidebarFooter className={cn("border-t", projectSidebar.footerClassName)}>
+        <div
+          className={cn(
+            "grid w-full items-center gap-2 p-2",
+            projectSidebar.footerContentClassName,
+          )}
         >
-          <div
-            className={cn(
-              "grid w-full items-center gap-2 p-2",
-              projectSidebar.footerContentClassName,
-            )}
-          >
-            {projectSidebar.footer}
-            {ENABLE_FILE_MANAGEMENT && (
-              <>
-                {ENABLE_KNOWLEDGE_BASES && (
-                  <SidebarMenuButton
-                    onClick={handleKnowledgeNavigation}
-                    size="md"
-                    className={cn(
-                      "text-sm",
-                      projectSidebar.footerItemClassName,
-                    )}
-                  >
-                    <ForwardedIconComponent
-                      name="Library"
-                      className="h-4 w-4"
-                    />
-                    {t("sidebar.knowledge")}
-                  </SidebarMenuButton>
-                )}
+          {projectSidebar.footer}
+          {ENABLE_FILE_MANAGEMENT && (
+            <>
+              {ENABLE_KNOWLEDGE_BASES && (
                 <SidebarMenuButton
-                  onClick={handleFilesNavigation}
+                  onClick={handleKnowledgeNavigation}
                   size="md"
                   className={cn("text-sm", projectSidebar.footerItemClassName)}
                 >
-                  <ForwardedIconComponent name="File" className="h-4 w-4" />
-                  {t("sidebar.myFiles")}
+                  <ForwardedIconComponent name="Library" className="h-4 w-4" />
+                  {t("sidebar.knowledge")}
                 </SidebarMenuButton>
-              </>
-            )}
-          </div>
-        </SidebarFooter>
-      )}
+              )}
+              <SidebarMenuButton
+                onClick={handleFilesNavigation}
+                size="md"
+                className={cn("text-sm", projectSidebar.footerItemClassName)}
+              >
+                <ForwardedIconComponent name="File" className="h-4 w-4" />
+                {t("sidebar.myFiles")}
+              </SidebarMenuButton>
+            </>
+          )}
+          <SidebarAccountActions
+            className={projectSidebar.footerItemClassName}
+          />
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 };

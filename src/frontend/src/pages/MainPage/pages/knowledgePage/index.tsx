@@ -150,10 +150,7 @@ export const KnowledgePage = () => {
       </div>
 
       {isDrawerOpen && (
-        <div
-          ref={drawerRef}
-          className="fixed right-0 top-12 z-50 h-[calc(100vh-48px)]"
-        >
+        <div ref={drawerRef} className="fixed inset-y-0 right-0 z-50 h-screen">
           <KnowledgeBaseDrawer
             isOpen={isDrawerOpen}
             onClose={closeDrawer}

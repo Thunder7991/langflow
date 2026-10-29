@@ -1,6 +1,11 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import SideBarFoldersButtonsComponent from "..";
 
+jest.mock("@/components/core/sidebarAccountActions", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 const mockMutateAddFolder = jest.fn();
 const mockMutateUpdateFolder = jest.fn();
 const mockSetErrorData = jest.fn();

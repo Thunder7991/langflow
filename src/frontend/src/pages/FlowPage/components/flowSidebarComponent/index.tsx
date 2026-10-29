@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import ShadTooltip from "@/components/common/shadTooltipComponent";
+import SidebarAccountActions from "@/components/core/sidebarAccountActions";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -608,6 +609,9 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
               )}
             </>
           )}
+          <div className="shrink-0 border-t p-2">
+            <SidebarAccountActions />
+          </div>
         </div>
       </div>
     </Sidebar>

@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DATASTAX_DOCS_URL, DOCS_URL } from "@/constants/constants";
 import { useLogout } from "@/controllers/API/queries/auth";
 import { CustomAccountMenuCommunityLinks } from "@/customization/components/custom-account-menu-community-links";
@@ -20,7 +22,7 @@ import {
 } from "../HeaderMenu";
 import ThemeButtons from "../ThemeButtons";
 
-export const AccountMenu = () => {
+export const AccountMenu = ({ trigger }: { trigger?: ReactNode }) => {
   const { t } = useTranslation();
   const version = useDarkStore((state) => state.version);
   const latestVersion = useDarkStore((state) => state.latestVersion);
@@ -44,14 +46,18 @@ export const AccountMenu = () => {
 
   return (
     <HeaderMenu>
-      <HeaderMenuToggle>
-        <div
-          className="h-6 w-6 rounded-lg focus-visible:outline-0"
-          data-testid="user-profile-settings"
-        >
-          <CustomProfileIcon />
-        </div>
-      </HeaderMenuToggle>
+      {trigger ? (
+        <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      ) : (
+        <HeaderMenuToggle>
+          <div
+            className="h-6 w-6 rounded-lg focus-visible:outline-0"
+            data-testid="user-profile-settings"
+          >
+            <CustomProfileIcon />
+          </div>
+        </HeaderMenuToggle>
+      )}
       <HeaderMenuItems position="right" classNameSize="w-[272px]">
         <div className="divide-y divide-foreground/10">
           <CustomHeaderMenuItemsTitle />
