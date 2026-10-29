@@ -13,6 +13,7 @@ import {
   getAxiosWithCredentials,
   getFetchCredentials,
 } from "@/customization/utils/get-fetch-credentials";
+import { handlePlatformSsoError } from "@/customization/utils/platform-sso-error";
 import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { BuildStatus, type EventDeliveryType } from "../../constants/enums";
@@ -100,6 +101,8 @@ function ApiInterceptor() {
         return response;
       },
       async (error: AxiosError) => {
+        if (handlePlatformSsoError(error.response?.data))
+          return Promise.reject(error);
         const isAuthenticationError =
           error?.response?.status === 403 || error?.response?.status === 401;
 

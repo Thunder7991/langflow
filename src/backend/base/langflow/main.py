@@ -1206,6 +1206,19 @@ def create_app():
     app.include_router(health_check_router)
     app.include_router(log_router)
 
+    from langflow.services.auth.platform_sso import PlatformSsoSettings, install_platform_sso
+
+    platform_sso_settings = PlatformSsoSettings()
+    if platform_sso_settings.enabled:
+        auth = get_settings_service().auth_settings
+        if auth.AUTO_LOGIN or auth.skip_auth_auto_login or auth.EXTERNAL_AUTH_ENABLED or auth.SSO_ENABLED:
+            msg = (
+                "Platform ticket SSO requires AUTO_LOGIN, skip_auth_auto_login, "
+                "EXTERNAL_AUTH_ENABLED and SSO_ENABLED off"
+            )
+            raise ValueError(msg)
+    install_platform_sso(app, platform_sso_settings)
+
     # Discover and register additional routers from plugins (langflow.plugins entry-point)
     load_plugin_routes(app)
 
