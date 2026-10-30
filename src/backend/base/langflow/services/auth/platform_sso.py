@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import ssl
 from datetime import datetime, timedelta, timezone
+from pathlib import Path  # noqa: TC003 - Pydantic resolves this settings field at runtime.
 from typing import Annotated
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID
@@ -31,6 +33,7 @@ class PlatformSsoSettings(BaseSettings):
     public_url: str = ""
     host_origin: str = ""
     secure: bool = True
+    ca_bundle: Path | None = None
 
     @model_validator(mode="after")
     def validate_enabled(self):
@@ -84,7 +87,9 @@ def native_access_token(user_id: str) -> str:
 
 async def platform_call(action: str, body: dict, settings: PlatformSsoSettings) -> dict:
     try:
-        async with httpx.AsyncClient(timeout=5, follow_redirects=False, trust_env=False) as client:
+        # 私有 HTTPS 部署显式指定信任链;未配置时沿用 httpx 默认,始终校验证书和主机名。
+        verify = ssl.create_default_context(cafile=str(settings.ca_bundle)) if settings.ca_bundle else True
+        async with httpx.AsyncClient(timeout=5, follow_redirects=False, trust_env=False, verify=verify) as client:
             response = await client.post(
                 f"{settings.platform_url.rstrip('/')}/api/internal/workflow/sso/{action}",
                 json=body,
@@ -101,7 +106,7 @@ async def platform_call(action: str, body: dict, settings: PlatformSsoSettings) 
         if envelope.get("statusCode") != status.HTTP_200_OK or not isinstance(envelope.get("data"), dict):
             raise HTTPException(503, "Invalid platform SSO response")
         return envelope["data"]
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         # 不记录请求体、票据或服务凭据;错误信息不能进入自动重登循环。
         raise HTTPException(503, "Platform SSO is unavailable") from exc
 
