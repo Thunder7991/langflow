@@ -22,7 +22,15 @@ import {
 } from "../HeaderMenu";
 import ThemeButtons from "../ThemeButtons";
 
-export const AccountMenu = ({ trigger }: { trigger?: ReactNode }) => {
+type AccountMenuVariant = "default" | "sidebar";
+
+export const AccountMenu = ({
+  trigger,
+  variant = "default",
+}: {
+  trigger?: ReactNode;
+  variant?: AccountMenuVariant;
+}) => {
   const { t } = useTranslation();
   const version = useDarkStore((state) => state.version);
   const latestVersion = useDarkStore((state) => state.latestVersion);
@@ -30,6 +38,7 @@ export const AccountMenu = ({ trigger }: { trigger?: ReactNode }) => {
   const { mutate: mutationLogout } = useLogout();
   const hideLogoutButton = useUtilityStore((state) => state.hideLogoutButton);
   const autoLogin = useAuthStore((state) => state.autoLogin);
+  const isSidebarMenu = variant === "sidebar";
 
   const handleLogout = () => {
     mutationLogout();
@@ -58,59 +67,69 @@ export const AccountMenu = ({ trigger }: { trigger?: ReactNode }) => {
           </div>
         </HeaderMenuToggle>
       )}
-      <HeaderMenuItems position="right" classNameSize="w-[272px]">
+      <HeaderMenuItems
+        position={isSidebarMenu ? "left" : "right"}
+        classNameSize="w-[272px]"
+      >
         <div className="divide-y divide-foreground/10">
           <CustomHeaderMenuItemsTitle />
-          <div>
-            <div className="h-[44px] items-center px-4 pt-3">
-              <div className="flex items-center justify-between">
-                <span
-                  data-testid="menu_version_button"
-                  id="menu_version_button"
-                  className="text-sm"
-                >
-                  {t("account.version")}
-                </span>
-                <div
-                  className={cn(
-                    "float-right text-xs",
-                    isLatestVersion && "text-accent-emerald-foreground",
-                    !isLatestVersion && "text-accent-amber-foreground",
-                  )}
-                >
-                  {version}{" "}
-                  {isLatestVersion
-                    ? t("account.latest")
-                    : t("account.updateAvailable")}
+          {!isSidebarMenu && (
+            <div>
+              <div className="h-[44px] items-center px-4 pt-3">
+                <div className="flex items-center justify-between">
+                  <span
+                    data-testid="menu_version_button"
+                    id="menu_version_button"
+                    className="text-sm"
+                  >
+                    {t("account.version")}
+                  </span>
+                  <div
+                    className={cn(
+                      "float-right text-xs",
+                      isLatestVersion && "text-accent-emerald-foreground",
+                      !isLatestVersion && "text-accent-amber-foreground",
+                    )}
+                  >
+                    {version}{" "}
+                    {isLatestVersion
+                      ? t("account.latest")
+                      : t("account.updateAvailable")}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div>
             <CustomAccountMenuNavigationItems
               onNavigate={(path) => navigate(path)}
             />
-            <HeaderMenuItemLink
-              newPage
-              href={ENABLE_DATASTAX_LANGFLOW ? DATASTAX_DOCS_URL : DOCS_URL}
-            >
-              <span data-testid="menu_docs_button" id="menu_docs_button">
-                {t("account.docs")}
-              </span>
-            </HeaderMenuItemLink>
+            {!isSidebarMenu && (
+              <HeaderMenuItemLink
+                newPage
+                href={ENABLE_DATASTAX_LANGFLOW ? DATASTAX_DOCS_URL : DOCS_URL}
+              >
+                <span data-testid="menu_docs_button" id="menu_docs_button">
+                  {t("account.docs")}
+                </span>
+              </HeaderMenuItemLink>
+            )}
           </div>
 
-          <CustomAccountMenuCommunityLinks />
+          {!isSidebarMenu && <CustomAccountMenuCommunityLinks />}
 
-          <div className="flex items-center justify-between px-4 py-[6.5px] text-sm">
-            <span className="">{t("account.theme")}</span>
-            <div className="relative top-[1px] float-right">
-              <ThemeButtons />
+          {/* 侧边栏设置菜单仅保留业务配置入口，隐藏文档与主题等辅助功能。 */}
+          {!isSidebarMenu && (
+            <div className="flex items-center justify-between px-4 py-[6.5px] text-sm">
+              <span className="">{t("account.theme")}</span>
+              <div className="relative top-[1px] float-right">
+                <ThemeButtons />
+              </div>
             </div>
-          </div>
+          )}
 
-          {!autoLogin && !hideLogoutButton && (
+          {!isSidebarMenu && !autoLogin && !hideLogoutButton && (
             <div>
               <HeaderMenuItemButton onClick={handleLogout} icon="log-out">
                 {t("account.logout")}

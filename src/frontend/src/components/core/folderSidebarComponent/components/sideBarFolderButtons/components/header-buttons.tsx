@@ -10,6 +10,9 @@ import { cn } from "@/utils/utils";
 import { AddFolderButton } from "./add-folder-button";
 import { UploadFolderButton } from "./upload-folder-button";
 
+// 暂时停用熟悉进度区域，连同分隔线一起不挂载；恢复时开启此开关即可。
+const SHOW_GETTING_STARTED_PROGRESS = false;
+
 export const HeaderButtons = ({
   handleUploadFlowsToFolder,
   isUpdatingFolder,
@@ -69,14 +72,17 @@ export const HeaderButtons = ({
 
   return (
     <>
-      {!hideGettingStartedProgress && !isDismissedDialog && userData && (
-        <CustomGetStartedProgress
-          userData={userData}
-          isGithubStarred={isGithubStarred ?? false}
-          isDiscordJoined={isDiscordJoined ?? false}
-          handleDismissDialog={handleDismissDialog}
-        />
-      )}
+      {SHOW_GETTING_STARTED_PROGRESS &&
+        !hideGettingStartedProgress &&
+        !isDismissedDialog &&
+        userData && (
+          <CustomGetStartedProgress
+            userData={userData}
+            isGithubStarred={isGithubStarred ?? false}
+            isDiscordJoined={isDiscordJoined ?? false}
+            handleDismissDialog={handleDismissDialog}
+          />
+        )}
 
       <div
         className={cn(

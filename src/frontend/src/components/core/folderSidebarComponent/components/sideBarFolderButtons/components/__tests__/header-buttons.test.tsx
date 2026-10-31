@@ -97,7 +97,7 @@ describe("HeaderButtons", () => {
     expect(screen.getByTestId("upload-folder-btn")).toBeInTheDocument();
   });
 
-  it("leaves the checklist divider to the get-started seam", () => {
+  it("temporarily hides the getting-started section even when enabled", () => {
     mockUserData = { optins: {} };
     act(() => {
       useUtilityStore.setState({ hideGettingStartedProgress: false });
@@ -106,8 +106,9 @@ describe("HeaderButtons", () => {
     const { container } = render(<HeaderButtons {...props} />);
 
     expect(
-      screen.getByTestId("custom-get-started-progress"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("custom-get-started-progress"),
+    ).not.toBeInTheDocument();
     expect(container.querySelector("hr")).not.toBeInTheDocument();
+    expect(screen.getByText("sidebar.projects")).toBeInTheDocument();
   });
 });

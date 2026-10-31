@@ -36,8 +36,8 @@ it("opens the original account popup from Settings and preserves navigation", as
   renderActions();
   expect(screen.queryByTestId("user-profile-settings")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Settings" }));
-  expect(screen.getByText("Version")).toBeInTheDocument();
-  expect(screen.getByText("Theme")).toBeInTheDocument();
+  expect(screen.queryByTestId("menu_docs_button")).not.toBeInTheDocument();
+  expect(screen.queryByText("Theme")).not.toBeInTheDocument();
   await user.click(screen.getByTestId("menu_settings_button"));
   expect(mockNavigate).toHaveBeenCalledWith("/settings");
 });

@@ -1,0 +1,8 @@
+{
+    "i18n-ally.localesPaths": [
+        "src/locales",
+        "src/types/messages",
+        "src/types/zustand/messages",
+        "src/controllers/API/queries/messages"
+    ]
+}

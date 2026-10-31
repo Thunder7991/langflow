@@ -33,6 +33,7 @@ export default function SidebarAccountActions({
         </SidebarMenuButton>
       </AlertDropdown>
       <CustomAccountMenu
+        variant="sidebar"
         trigger={
           <SidebarMenuButton
             size="md"

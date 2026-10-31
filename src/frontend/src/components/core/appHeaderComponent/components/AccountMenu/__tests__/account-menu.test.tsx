@@ -58,8 +58,16 @@ jest.mock("../../HeaderMenu/index", () => ({
   HeaderMenuToggle: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
-  HeaderMenuItems: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  HeaderMenuItems: ({
+    children,
+    position,
+  }: {
+    children: ReactNode;
+    position?: string;
+  }) => (
+    <div data-testid="menu-position" data-menu-position={position}>
+      {children}
+    </div>
   ),
   HeaderMenuItemButton: ({
     children,
@@ -125,5 +133,26 @@ describe("AccountMenu", () => {
       screen.getByTestId("custom-account-menu-community-links"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("menu_github_button")).not.toBeInTheDocument();
+  });
+
+  it("keeps the sidebar account menu focused on local actions", () => {
+    render(<AccountMenu variant="sidebar" />);
+
+    expect(screen.queryByTestId("menu_version_button")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("custom-account-menu-community-links"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /logout/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /settings/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("menu_docs_button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("theme-buttons")).not.toBeInTheDocument();
+    expect(screen.getByTestId("menu-position")).toHaveAttribute(
+      "data-menu-position",
+      "left",
+    );
   });
 });

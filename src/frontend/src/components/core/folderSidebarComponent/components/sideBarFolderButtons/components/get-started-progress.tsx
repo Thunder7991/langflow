@@ -89,8 +89,8 @@ export const GetStartedProgress: FC<{
   };
 
   return (
-    <div className="mt-3 h-[10.8rem] w-full">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="mt-3 h-[4rem] w-full">
+      {/* <div className="mb-2 flex items-center justify-between">
         <span
           className="text-sm font-medium"
           data-testid="get_started_progress_title"
@@ -112,9 +112,9 @@ export const GetStartedProgress: FC<{
         >
           <IconComponent name="X" className="h-4 w-4" />
         </button>
-      </div>
+      </div> */}
 
-      <div className="mb-1 mt-2 flex items-center justify-between gap-3">
+      {/* <div className="mb-1 mt-2 flex items-center justify-between gap-3">
         <div className="h-1 w-full rounded-full bg-muted">
           <div
             className="h-1 w-[33%] rounded-full bg-accent-pink-foreground"
@@ -127,10 +127,10 @@ export const GetStartedProgress: FC<{
         >
           {percentageGetStarted}%
         </span>
-      </div>
+      </div> */}
 
       <div className="mt-2 space-y-1">
-        <Button
+        {/* <Button
           data-testid="github_starred_btn_get_started"
           unstyled
           className={cn(
@@ -172,9 +172,9 @@ export const GetStartedProgress: FC<{
               </span>
             </ShadTooltip>
           </div>
-        </Button>
+        </Button> */}
 
-        <Button
+        {/* <Button
           data-testid="discord_joined_btn_get_started"
           unstyled
           className={cn(
@@ -219,7 +219,7 @@ export const GetStartedProgress: FC<{
               </span>
             </ShadTooltip>
           </div>
-        </Button>
+        </Button> */}
 
         {!hideNewFlowButton && (
           <Button
