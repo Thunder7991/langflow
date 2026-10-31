@@ -6,6 +6,18 @@ import { PlatformWorkflowGuard } from "../platformWorkflowGuard";
 
 afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
 
+it("allows My Files with explicit file_read while keeping other asset pages closed", () => {
+  useAuthStore.setState({ platformWorkflowActions: ["read", "file_read"] });
+  render(
+    <MemoryRouter initialEntries={["/assets/files"]}>
+      <PlatformWorkflowGuard>
+        <div>personal files</div>
+      </PlatformWorkflowGuard>
+    </MemoryRouter>,
+  );
+  expect(screen.getByText("personal files")).toBeInTheDocument();
+});
+
 it.each([
   "/assets/files",
   "/assets/knowledge-bases",

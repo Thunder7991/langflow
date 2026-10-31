@@ -167,8 +167,12 @@ def _actions(identity: dict) -> list[str]:
         identity["authorizationVersion"] != 1
         or identity.get("resourceScope") != "personal"
         or not isinstance(actions, list)
-        or not all(isinstance(a, str) and a in {"read", "create", "update"} for a in actions)
+        or not all(
+            isinstance(a, str) and a in {"read", "create", "update", "file_read", "file_upload", "file_download"}
+            for a in actions
+        )
         or "read" not in actions
+        or (bool({"file_upload", "file_download"}.intersection(actions)) and "file_read" not in actions)
     ):
         raise HTTPException(503, "Unsupported platform workflow authorization")
     return actions
@@ -352,7 +356,21 @@ class PlatformSsoMiddleware:
         try:
             claims, identity = await _session(connection, self.settings)
             actions = _actions(identity)
-            scope.setdefault("state", {})["platform_workflow"] = {"actions": actions, "user_id": claims["sub"]}
+
+            async def recheck():
+                nonlocal actions
+                # 重检失败不能继续把请求开始时的旧能力写入响应头。
+                actions = []
+                _, current_identity = await _session(connection, self.settings)
+                actions = _actions(current_identity)
+                return actions
+
+            scope.setdefault("state", {})["platform_workflow"] = {
+                "actions": actions,
+                "user_id": claims["sub"],
+                "recheck": recheck,
+                "host_origin": self.settings.host_origin.rstrip("/"),
+            }
             method = scope["method"]
             if (
                 method not in {"GET", "HEAD"}
@@ -391,6 +409,15 @@ class PlatformSsoMiddleware:
                 path,
             )
             action = None
+            if path == "/api/v2/platform-files" or re.fullmatch(
+                r"/api/v2/platform-files/(?:policy|[0-9a-fA-F-]{36}(?:/content)?)", path
+            ):
+                if method in {"GET", "HEAD"}:
+                    action = (
+                        "file_read" if path.endswith(("platform-files", "/policy", "/content")) else "file_download"
+                    )
+                elif method == "POST" and path == "/api/v2/platform-files":
+                    action = "file_upload"
             if method == "POST" and path.rstrip("/") in {"/api/v1/flows", "/api/v1/projects"}:
                 action = "create"
             elif method == "PATCH" and re.fullmatch(r"/api/v1/flows/[0-9a-fA-F-]{36}", path):

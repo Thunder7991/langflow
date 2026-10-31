@@ -15,7 +15,10 @@ export function PlatformWorkflowGuard({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { customParam } = useParams();
   const path = customParam ? pathname.slice(customParam.length + 1) : pathname;
-  if (platformActions != null && !isPlatformWorkflowRouteAvailable(path)) {
+  if (
+    platformActions != null &&
+    !isPlatformWorkflowRouteAvailable(path, platformActions)
+  ) {
     return (
       <div
         className="flex h-full flex-col items-center justify-center gap-4 p-6"

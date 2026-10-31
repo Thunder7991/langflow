@@ -176,11 +176,11 @@ describe("SidebarSegmentedNav", () => {
   });
 
   it("sets active state for current active section", () => {
-    mockUseSidebar.activeSection = "mcp";
+    mockUseSidebar.activeSection = "bundles";
     render(<SidebarSegmentedNav />);
 
-    const mcpButton = screen.getByTestId("sidebar-nav-mcp");
-    expect(mcpButton).toHaveAttribute("data-active", "true");
+    const bundlesButton = screen.getByTestId("sidebar-nav-bundles");
+    expect(bundlesButton).toHaveAttribute("data-active", "true");
 
     // Other buttons should not be active
     const componentsButton = screen.getByTestId("sidebar-nav-components");
@@ -198,18 +198,18 @@ describe("SidebarSegmentedNav", () => {
   it("calls setActiveSection when clicking on different section", () => {
     render(<SidebarSegmentedNav />);
 
-    const mcpButton = screen.getByTestId("sidebar-nav-mcp");
-    fireEvent.click(mcpButton);
+    const bundlesButton = screen.getByTestId("sidebar-nav-bundles");
+    fireEvent.click(bundlesButton);
 
-    expect(mockUseSidebar.setActiveSection).toHaveBeenCalledWith("mcp");
+    expect(mockUseSidebar.setActiveSection).toHaveBeenCalledWith("bundles");
     expect(mockUseSidebar.setActiveSection).toHaveBeenCalledTimes(1);
   });
 
   it("resets search when changing active sections", () => {
     render(<SidebarSegmentedNav />);
 
-    const mcpButton = screen.getByTestId("sidebar-nav-mcp");
-    fireEvent.click(mcpButton);
+    const bundlesButton = screen.getByTestId("sidebar-nav-bundles");
+    fireEvent.click(bundlesButton);
 
     expect(mockUseSearchContext.setSearch).toHaveBeenCalledWith("");
     expect(mockUseSearchContext.setSearch).toHaveBeenCalledTimes(1);
@@ -275,11 +275,11 @@ describe("SidebarSegmentedNav", () => {
   });
 
   it("applies correct CSS classes", () => {
-    mockUseSidebar.activeSection = "mcp";
+    mockUseSidebar.activeSection = "bundles";
     render(<SidebarSegmentedNav />);
 
-    const mcpButton = screen.getByTestId("sidebar-nav-mcp");
-    expect(mcpButton).toHaveClass(
+    const bundlesButton = screen.getByTestId("sidebar-nav-bundles");
+    expect(bundlesButton).toHaveClass(
       "flex",
       "h-8",
       "w-8",
@@ -343,16 +343,16 @@ describe("SidebarSegmentedNav", () => {
   it("handles multiple rapid clicks correctly", () => {
     render(<SidebarSegmentedNav />);
 
-    const mcpButton = screen.getByTestId("sidebar-nav-mcp");
+    const bundlesButton = screen.getByTestId("sidebar-nav-bundles");
 
     // Click multiple times rapidly
-    fireEvent.click(mcpButton);
-    fireEvent.click(mcpButton);
-    fireEvent.click(mcpButton);
+    fireEvent.click(bundlesButton);
+    fireEvent.click(bundlesButton);
+    fireEvent.click(bundlesButton);
 
     // Should have called setActiveSection for each click since activeSection !== mcp
     expect(mockUseSidebar.setActiveSection).toHaveBeenCalledTimes(3);
-    expect(mockUseSidebar.setActiveSection).toHaveBeenCalledWith("mcp");
+    expect(mockUseSidebar.setActiveSection).toHaveBeenCalledWith("bundles");
   });
 
   it("renders a separator element before the memories nav item", () => {
@@ -381,13 +381,15 @@ describe("SidebarSegmentedNav", () => {
     const separatorIndex = nodes.findIndex(
       (n) => n.tagName === "LI" && !n.hasAttribute("data-testid"),
     );
-    const agentButton = container.querySelector(
-      '[data-testid="sidebar-nav-agent"]',
+    const memoriesButton = container.querySelector(
+      '[data-testid="sidebar-nav-memories"]',
     );
-    const agentItem = agentButton?.closest('[data-testid="sidebar-menu-item"]');
-    const agentIndex = nodes.indexOf(agentItem as Element);
-    // Agent is the first feature tab, so the separator sits immediately before it
-    expect(separatorIndex).toBe(agentIndex - 1);
+    const memoriesItem = memoriesButton?.closest(
+      '[data-testid="sidebar-menu-item"]',
+    );
+    const memoriesIndex = nodes.indexOf(memoriesItem as Element);
+    // 隐藏代理程序后，分隔线应位于第一个可见功能菜单“记忆”前。
+    expect(separatorIndex).toBe(memoriesIndex - 1);
   });
 
   it("sidebar-menu has no direct div children between it and menu items", () => {
@@ -401,7 +403,7 @@ describe("SidebarSegmentedNav", () => {
   });
 
   it("exports NAV_ITEMS correctly", () => {
-    expect(NAV_ITEMS).toHaveLength(7);
+    expect(NAV_ITEMS).toHaveLength(5);
     expect(NAV_ITEMS[0]).toEqual({
       id: "components",
       icon: "component",
@@ -409,36 +411,24 @@ describe("SidebarSegmentedNav", () => {
       tooltip: "sidebar.nav.components",
     });
     expect(NAV_ITEMS[1]).toEqual({
-      id: "mcp",
-      icon: "Mcp",
-      label: "sidebar.nav.mcp",
-      tooltip: "sidebar.nav.mcp",
-    });
-    expect(NAV_ITEMS[2]).toEqual({
       id: "bundles",
       icon: "blocks",
       label: "sidebar.nav.bundles",
       tooltip: "sidebar.nav.bundles",
     });
-    expect(NAV_ITEMS[3]).toEqual({
+    expect(NAV_ITEMS[2]).toEqual({
       id: "versions",
       icon: "History",
       label: "sidebar.nav.versions",
       tooltip: "sidebar.nav.versionHistory",
     });
-    expect(NAV_ITEMS[4]).toEqual({
-      id: "agent",
-      icon: "Bot",
-      label: "sidebar.nav.agent",
-      tooltip: "sidebar.nav.agent",
-    });
-    expect(NAV_ITEMS[5]).toEqual({
+    expect(NAV_ITEMS[3]).toEqual({
       id: "memories",
       icon: "BrainCog",
       label: "memory.sidebarTitle",
       tooltip: "memory.sidebarTitle",
     });
-    expect(NAV_ITEMS[6]).toEqual({
+    expect(NAV_ITEMS[4]).toEqual({
       id: "traces",
       icon: "Activity",
       label: "sidebar.nav.traces",
@@ -446,11 +436,11 @@ describe("SidebarSegmentedNav", () => {
     });
   });
 
-  it("always shows the agent tab", () => {
+  it("hides MCP and agent while retaining the other menu entries", () => {
     render(<SidebarSegmentedNav />);
 
-    // The tab renders for every flow; eligibility is handled inside the tab.
-    expect(screen.getByTestId("sidebar-nav-agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-agent")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sidebar-nav-mcp")).not.toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-components")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar-nav-memories")).toBeInTheDocument();
   });

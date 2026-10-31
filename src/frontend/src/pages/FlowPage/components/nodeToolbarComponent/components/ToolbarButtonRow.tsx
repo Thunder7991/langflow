@@ -77,14 +77,14 @@ export function ToolbarButtonRow({
           dataTestId="parameters-button"
         />
       )}
-      {isPlatform && (
+      {/* {isPlatform && (
         <span
           className="text-xs text-muted-foreground"
           title={PLATFORM_UNAVAILABLE_REASON}
         >
           调试暂未开放
         </span>
-      )}
+      )} */}
       {!isPlatform && !hasToolMode && (
         <ToolbarButton
           icon="FreezeAll"

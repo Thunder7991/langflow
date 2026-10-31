@@ -25,12 +25,13 @@ export const NAV_ITEMS: SidebarNavItem[] = [
     label: "sidebar.nav.components",
     tooltip: "sidebar.nav.components",
   },
-  {
-    id: "mcp",
-    icon: "Mcp",
-    label: "sidebar.nav.mcp",
-    tooltip: "sidebar.nav.mcp",
-  },
+  // 暂时隐藏 MCP 菜单，保留配置方便恢复；展开、收起及欢迎页共用此列表。
+  // {
+  //   id: "mcp",
+  //   icon: "Mcp",
+  //   label: "sidebar.nav.mcp",
+  //   tooltip: "sidebar.nav.mcp",
+  // },
   {
     id: "bundles",
     icon: "blocks",
@@ -43,12 +44,13 @@ export const NAV_ITEMS: SidebarNavItem[] = [
     label: "sidebar.nav.versions",
     tooltip: "sidebar.nav.versionHistory",
   },
-  {
-    id: "agent",
-    icon: "Bot",
-    label: "sidebar.nav.agent",
-    tooltip: "sidebar.nav.agent",
-  },
+  // 暂时隐藏“代理程序”菜单，仅隐藏入口，不改对应功能。
+  // {
+  //   id: "agent",
+  //   icon: "Bot",
+  //   label: "sidebar.nav.agent",
+  //   tooltip: "sidebar.nav.agent",
+  // },
   {
     id: "memories",
     icon: "BrainCog",

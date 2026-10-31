@@ -7,6 +7,7 @@ export const URLs = {
   API_KEY: `api_key`,
   FILES: `files`,
   FILE_MANAGEMENT: `files`,
+  PLATFORM_FILES: "platform-files",
   VERSION: `version`,
   MESSAGES: `monitor/messages`,
   BUILDS: `monitor/builds`,

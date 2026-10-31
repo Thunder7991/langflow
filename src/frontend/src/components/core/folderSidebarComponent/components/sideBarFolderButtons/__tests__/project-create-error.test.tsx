@@ -9,6 +9,8 @@ jest.mock("@/components/core/sidebarAccountActions", () => ({
 const mockMutateAddFolder = jest.fn();
 const mockMutateUpdateFolder = jest.fn();
 const mockSetErrorData = jest.fn();
+let mockPlatformActions: string[] | null = null;
+const mockNavigate = jest.fn();
 const mockCan = jest.fn(
   (_projectId: string | undefined | null, _action: string) => true,
 );
@@ -106,13 +108,13 @@ jest.mock("@/controllers/API/queries/folders/use-get-download-folders", () => ({
 jest.mock("@/customization/feature-flags", () => ({
   ENABLE_CUSTOM_PARAM: false,
   ENABLE_DATASTAX_LANGFLOW: false,
-  ENABLE_FILE_MANAGEMENT: false,
+  ENABLE_FILE_MANAGEMENT: true,
   ENABLE_KNOWLEDGE_BASES: false,
   ENABLE_MCP_NOTICE: false,
 }));
 
 jest.mock("@/customization/hooks/use-custom-navigate", () => ({
-  useCustomNavigate: () => jest.fn(),
+  useCustomNavigate: () => mockNavigate,
 }));
 
 jest.mock("@/customization/utils/analytics", () => ({ track: jest.fn() }));
@@ -124,7 +126,10 @@ jest.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 jest.mock("@/stores/authStore", () => ({
   __esModule: true,
   default: (selector: (state: { userData: undefined }) => unknown) =>
-    selector({ userData: undefined }),
+    selector({
+      userData: undefined,
+      platformWorkflowActions: mockPlatformActions,
+    } as never),
 }));
 jest.mock("@/stores/alertStore", () => ({
   __esModule: true,
@@ -210,8 +215,25 @@ jest.mock("../../sidebarFolderSkeleton", () => ({
 describe("project creation errors", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPlatformActions = null;
     mockCan.mockReturnValue(true);
     mockFolders = [];
+  });
+
+  it("enables My Files only with file_read, independently from editing", () => {
+    mockPlatformActions = ["read", "update"];
+    const view = render(
+      <SideBarFoldersButtonsComponent handleChangeFolder={jest.fn()} />,
+    );
+    expect(screen.getByTestId("my-files-button")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("my-files-button"));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    mockPlatformActions = ["read", "file_read"];
+    view.rerender(
+      <SideBarFoldersButtonsComponent handleChangeFolder={jest.fn()} />,
+    );
+    fireEvent.click(screen.getByTestId("my-files-button"));
+    expect(mockNavigate).toHaveBeenCalledWith("/assets/files");
   });
 
   it("surfaces a backend permission denial in the alert UI", () => {

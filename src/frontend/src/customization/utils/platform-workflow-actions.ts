@@ -5,7 +5,16 @@ export function syncPlatformWorkflowActions(header: unknown) {
   if (typeof header !== "string") return;
   const actions = header
     .split(",")
-    .filter((action) => ["read", "create", "update"].includes(action));
+    .filter((action) =>
+      [
+        "read",
+        "create",
+        "update",
+        "file_read",
+        "file_upload",
+        "file_download",
+      ].includes(action),
+    );
   const state = useAuthStore.getState();
   if (state.platformWorkflowActions?.join(",") !== actions.join(",")) {
     state.setPlatformWorkflowActions(actions);

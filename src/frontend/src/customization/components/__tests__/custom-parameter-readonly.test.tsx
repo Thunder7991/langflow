@@ -55,7 +55,7 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-it("does not mount file inputs in platform mode, preserving the existing reference", () => {
+it("does not mount file inputs without file_read, preserving the existing reference", () => {
   useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
   render(
     <CustomParameterComponent
@@ -65,7 +65,7 @@ it("does not mount file inputs in platform mode, preserving the existing referen
     />,
   );
   expect(screen.queryByTestId("parser-template")).not.toBeInTheDocument();
-  expect(screen.getByText(/文件.*尚未开放/)).toBeInTheDocument();
+  expect(screen.getByText(/个人文件读取权限/)).toBeInTheDocument();
   expect(props.handleOnNewValue).not.toHaveBeenCalled();
 });
 

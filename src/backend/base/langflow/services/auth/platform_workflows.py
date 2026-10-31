@@ -26,8 +26,8 @@ def require_action(request: Request, action: str) -> bool:
     return True
 
 
-def validate_graph(data: dict | None) -> None:
-    """Save inert builtin graphs; credentials, MCP, file inputs and custom code stay closed."""
+def validate_graph(data: dict | None, *, verified_files: set[str] | None = None) -> None:
+    """Save inert builtin graphs; file paths must first pass the owner policy."""
     if not data:
         return
     from langflow.api.v1.custom_component_policy import resolve_component_code_for_action
@@ -41,10 +41,17 @@ def validate_graph(data: dict | None) -> None:
             # 在原生秘密提取之前检查模板(包含分组中的子节点), 避免拒绝保存却留下凭据副作用。
             if "mcp" in str(value.get("type", "")).lower():
                 raise HTTPException(403, "MCP components are not enabled for platform editing")
-            if (
-                value.get("password") is True or value.get("load_from_db") is True or value.get("type") == "file"
-            ) and value.get("value"):
-                raise HTTPException(403, "Credentials and file inputs are not enabled for platform editing")
+            if (value.get("password") is True or value.get("load_from_db") is True) and value.get("value"):
+                raise HTTPException(403, "Credentials are not enabled for platform editing")
+            if value.get("type") == "file" and (value.get("value") or value.get("file_path")):
+                paths = value.get("file_path")
+                if (
+                    not isinstance(paths, list)
+                    or not paths
+                    or not verified_files
+                    or not all(path in verified_files for path in paths)
+                ):
+                    raise HTTPException(403, "File inputs require verified personal references")
             code = value.get("code")
             if isinstance(code, str) and code:
                 raise HTTPException(403, "Custom code fields are not enabled")
@@ -118,7 +125,10 @@ async def validate_create(request: Request, session: AsyncSession, payload, user
         return
     validate_fields(payload)
     await require_personal_destination(session, payload.folder_id, user_id)
-    validate_graph(payload.data)
+    from langflow.services.auth.platform_files import validate_references
+
+    verified = await validate_references(request, session, payload.data, user_id)
+    validate_graph(payload.data, verified_files=verified)
 
 
 async def validate_update(request: Request, session: AsyncSession, payload, flow, user_id: UUID) -> None:
@@ -131,7 +141,11 @@ async def validate_update(request: Request, session: AsyncSession, payload, flow
     validate_fields(payload)
     await require_personal_destination(session, flow.folder_id, user_id)
     await require_personal_destination(session, getattr(payload, "folder_id", None), user_id)
-    validate_graph(payload.data if payload.data is not None else flow.data)
+    from langflow.services.auth.platform_files import validate_references
+
+    data = payload.data if payload.data is not None else flow.data
+    verified = await validate_references(request, session, data, user_id)
+    validate_graph(data, verified_files=verified)
     if payload.data is not None and not request.headers.get("if-match"):
         raise HTTPException(428, "Graph updates require If-Match")
 
@@ -199,7 +213,7 @@ async def prepare_node_refresh(request: Request, payload, flow_id: UUID | None, 
         None,
     )
     if class_name is None:
-        raise HTTPException(403, "B2 暂不支持此节点的动态初始化; 模型、文件、MCP 等能力尚未开放")
+        raise HTTPException(403, "当前仅支持已审查的六类内置节点; 通用文件解析、模型和 MCP 节点尚未开放")
     if payload.get_class_name() not in {None, class_name}:
         raise HTTPException(403, "Component class does not match trusted builtin")
 
@@ -216,11 +230,20 @@ async def prepare_node_refresh(request: Request, payload, flow_id: UUID | None, 
         if isinstance(field, dict) and field.get("load_from_db"):
             raise HTTPException(403, "B2 暂不支持数据库变量或凭据初始化")
     # field_value 可以比模板快一拍; 两份都审查, 避免空模板携带秘密值绕过检查。
-    validate_graph({"template": payload.template, "field_value": payload.field_value})
     field_template = payload.template.get(payload.field)
     if not isinstance(field_template, dict):
         raise HTTPException(422, "Unknown node input field")
-    validate_graph({payload.field: {**field_template, "value": payload.field_value}})
+    from langflow.services.auth.platform_files import validate_references
+
+    # 初始化也会接收现有文件字段; 两份输入均验证归属, 不读取或执行文件内容。
+    data = {
+        "template": payload.template,
+        "field_value": payload.field_value,
+        "updated": {payload.field: {**field_template, "value": payload.field_value}},
+    }
+    async with session_scope() as session:
+        verified = await validate_references(request, session, data, user.id)
+    validate_graph(data, verified_files=verified)
     if class_name == "TextInputComponent" and (
         payload.template.get("use_global_variable", {}).get("value")
         or (payload.field == "use_global_variable" and payload.field_value)

@@ -121,20 +121,25 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
   } = useSidebar();
   const addComponent = useAddComponent();
 
-  useEffect(() => {
-    if (
-      isPlatform &&
-      ["mcp", "agent", "memories", "traces"].includes(activeSection)
-    )
-      setActiveSection("components");
-  }, [isPlatform, activeSection, setActiveSection]);
+  // 临时允许查看各菜单，暂停平台模式下自动切回组件页。
+  // useEffect(() => {
+  //   if (
+  //     isPlatform &&
+  //     ["mcp", "agent", "memories", "traces"].includes(activeSection)
+  //   )
+  //     setActiveSection("components");
+  // }, [isPlatform, activeSection, setActiveSection]);
 
   // Get MCP servers for search functionality (only when new sidebar is enabled)
   const {
     data: mcpServers,
     isLoading: mcpLoading,
     isSuccess: mcpSuccess,
-  } = useGetMCPServers({ enabled: ENABLE_NEW_SIDEBAR && !isPlatform });
+  } = useGetMCPServers({
+    // 原限制：enabled: ENABLE_NEW_SIDEBAR && !isPlatform
+    // 平台模式仅点击 MCP 菜单时读取，避免打开画布就额外查询。
+    enabled: ENABLE_NEW_SIDEBAR && (!isPlatform || activeSection === "mcp"),
+  });
 
   // Get search state from context
   const context = useSearchContext();
@@ -522,7 +527,8 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
                             setShowConfig={setShowConfig}
                           />
                         )}
-                        {!isPlatform && showMcp && (
+                        {/* 临时显示 MCP 面板；原条件：!isPlatform && showMcp */}
+                        {showMcp && (
                           <McpSidebarGroup
                             mcpComponents={
                               hasSearchInput

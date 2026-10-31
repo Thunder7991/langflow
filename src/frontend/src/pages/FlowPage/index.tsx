@@ -52,18 +52,22 @@ function FlowPageMainContent({
   setIsLoading: (isLoading: boolean) => void;
 }): JSX.Element {
   const { activeSection } = useSidebar();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  // 临时允许查看菜单面板，保留平台限制以便恢复。
+  // const isPlatform = useAuthStore(
+  //   (state) => state.platformWorkflowActions != null,
+  // );
   const showTraces =
-    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "traces";
+    // !isPlatform &&
+    ENABLE_NEW_SIDEBAR && activeSection === "traces";
   const showMemories =
-    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "memories";
+    // !isPlatform &&
+    ENABLE_NEW_SIDEBAR && activeSection === "memories";
   // The Agent tab is always available. It handles its own three states
   // (ineligible / eligible-not-serving / serving) inside AgentMainContent, so
   // there's nothing to fall back to the canvas for.
   const showAgent =
-    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "agent";
+    // !isPlatform &&
+    ENABLE_NEW_SIDEBAR && activeSection === "agent";
 
   if (showAgent) {
     return <AgentMainContent />;

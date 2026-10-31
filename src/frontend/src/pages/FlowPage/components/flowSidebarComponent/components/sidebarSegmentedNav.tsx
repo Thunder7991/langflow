@@ -9,8 +9,9 @@ import {
   type SidebarSection,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
-import useAuthStore from "@/stores/authStore";
+// 临时查看左侧各菜单，保留平台禁用逻辑以便恢复。
+// import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
+// import useAuthStore from "@/stores/authStore";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { cn } from "@/utils/utils";
 import { useSearchContext } from "../index";
@@ -36,9 +37,9 @@ const SidebarSegmentedNav = ({
   hiddenFromTabOrder = false,
 }: SidebarSegmentedNavProps) => {
   const { t } = useTranslation();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  // const isPlatform = useAuthStore(
+  //   (state) => state.platformWorkflowActions != null,
+  // );
   const { activeSection, setActiveSection, toggleSidebar, open } = useSidebar();
   const { setSearch } = useSearchContext();
   const setPlaygroundOpen = usePlaygroundStore((state) => state.setIsOpen);
@@ -68,10 +69,11 @@ const SidebarSegmentedNav = ({
             <SidebarMenuItem className="px-1 pt-1">
               <ShadTooltip
                 content={
-                  isPlatform &&
-                  ["mcp", "agent", "memories", "traces"].includes(item.id)
-                    ? PLATFORM_UNAVAILABLE_REASON
-                    : t(item.tooltip)
+                  // isPlatform &&
+                  // ["mcp", "agent", "memories", "traces"].includes(item.id)
+                  //   ? PLATFORM_UNAVAILABLE_REASON
+                  //   : t(item.tooltip)
+                  t(item.tooltip)
                 }
                 side="right"
                 ariaDescribedBy={undefined}
@@ -79,15 +81,16 @@ const SidebarSegmentedNav = ({
                 <SidebarMenuButton
                   size="md"
                   disabled={
-                    isPlatform &&
-                    ["mcp", "agent", "memories", "traces"].includes(item.id)
+                    // isPlatform &&
+                    // ["mcp", "agent", "memories", "traces"].includes(item.id)
+                    false
                   }
                   onClick={() => {
-                    if (
-                      isPlatform &&
-                      ["mcp", "agent", "memories", "traces"].includes(item.id)
-                    )
-                      return;
+                    // if (
+                    //   isPlatform &&
+                    //   ["mcp", "agent", "memories", "traces"].includes(item.id)
+                    // )
+                    //   return;
                     if (item.id === "traces") {
                       setPlaygroundOpen(false);
                       setPlaygroundFullscreen(false);

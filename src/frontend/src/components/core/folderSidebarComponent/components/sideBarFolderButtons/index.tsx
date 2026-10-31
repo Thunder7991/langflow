@@ -40,7 +40,6 @@ import {
 import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
 import { track } from "@/customization/utils/analytics";
 import { customGetDownloadFolderBlob } from "@/customization/utils/custom-get-download-folders";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import { createFileUpload } from "@/helpers/create-file-upload";
 import { getObjectsFromFilelist } from "@/helpers/get-objects-from-filelist";
 import useUploadFlow from "@/hooks/flows/use-upload-flow";
@@ -448,7 +447,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleFilesNavigation = () => {
-    if (isPlatform) return;
+    if (isPlatform && !platformActions.includes("file_read")) return;
     _navigate("/assets/files");
   };
 
@@ -642,8 +641,12 @@ const SideBarFoldersButtonsComponent = ({
               )}
               <SidebarMenuButton
                 onClick={handleFilesNavigation}
-                disabled={isPlatform}
-                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                disabled={isPlatform && !platformActions.includes("file_read")}
+                title={
+                  isPlatform && !platformActions.includes("file_read")
+                    ? "需要平台个人文件读取权限"
+                    : undefined
+                }
                 data-testid="my-files-button"
                 size="md"
                 className={cn("text-sm", projectSidebar.footerItemClassName)}

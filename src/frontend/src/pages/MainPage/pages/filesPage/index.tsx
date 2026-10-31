@@ -3,9 +3,21 @@ import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import useAuthStore from "@/stores/authStore";
 import FilesTab from "./components/FilesTab";
+import PlatformFilesPage from "./platform-files-page";
 
 export const FilesPage = () => {
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const userId = useAuthStore((state) => state.userData?.id);
+  return actions != null ? (
+    <PlatformFilesPage key={userId} />
+  ) : (
+    <NativeFilesPage />
+  );
+};
+
+const NativeFilesPage = () => {
   const { t } = useTranslation();
   useDocumentTitle(t("files.pageTitle"));
   // biome-ignore lint/suspicious/noExplicitAny: legacy

@@ -1,6 +1,6 @@
 /** 仅约束平台嵌入模式的界面；最终授权和可信源码检查仍由服务端执行。 */
 export const PLATFORM_UNAVAILABLE_REASON =
-  "当前平台仅开放本人普通流程的查看、新建和保存；文件、导入导出、复制流程、删除流程、调试、发布及 MCP 管理尚未开放。";
+  "当前平台按权限开放本人普通流程和个人文件；导入导出、复制流程、删除、调试、发布及 MCP 管理尚未开放。";
 export const PLATFORM_READ_ONLY_REASON =
   "当前没有修改权限，未保存内容仍保留在当前页面。";
 
@@ -17,7 +17,12 @@ export function isPlatformNodeAvailable(type: string): boolean {
   return EDITABLE_NODE_TYPES.has(type);
 }
 
-export function isPlatformWorkflowRouteAvailable(pathname: string): boolean {
+export function isPlatformWorkflowRouteAvailable(
+  pathname: string,
+  actions: string[] = [],
+): boolean {
+  if (/^\/assets\/files\/?$/.test(pathname))
+    return actions.includes("file_read");
   if (/^\/(assets|components|mcp)(\/|$)/.test(pathname)) return false;
   if (/^\/settings(\/|$)/.test(pathname)) {
     return (

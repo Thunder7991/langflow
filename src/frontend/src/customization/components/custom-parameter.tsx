@@ -10,6 +10,7 @@ import type { APIClassType, InputFieldType } from "@/types/api";
 import type { targetHandleType } from "@/types/flow";
 import { scapedJSONStringfy } from "@/utils/reactflowUtils";
 import { cn } from "@/utils/utils";
+import PlatformFileInput from "./platform-file-input";
 
 export function CustomParameterComponent({
   handleOnNewValue,
@@ -52,9 +53,10 @@ export function CustomParameterComponent({
   const edges = useFlowStore((state) => state.edges);
   const currentFlowId = useFlowStore((state) => state.currentFlow?.id);
   const isReadOnly = useIsFlowReadOnly(currentFlowId);
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
   );
+  const isPlatform = platformActions != null;
 
   const disabled =
     edges.some(
@@ -63,21 +65,33 @@ export function CustomParameterComponent({
         scapedJSONStringfy(proxy ? { ...inputId, proxy } : inputId),
     ) || isToolMode;
 
-  // 文件/凭据选择器本身含自动请求；不能只禁用外层，否则仍挂载未授权的管理接口。
+  if (isPlatform && templateData.type === "file") {
+    if (!platformActions.includes("file_read"))
+      return (
+        <p className="text-sm text-muted-foreground" role="status">
+          需要平台个人文件读取权限；已有引用保留。
+        </p>
+      );
+    return (
+      <PlatformFileInput
+        paths={templateData.file_path}
+        value={templateValue}
+        multiple={Boolean(templateData.list)}
+        disabled={isReadOnly || disabled || Boolean(templateData.readonly)}
+        onChange={handleOnNewValue}
+      />
+    );
+  }
+  // 凭据选择器本身含自动请求；不能只禁用外层，否则仍挂载未授权的管理接口。
   if (
     isPlatform &&
-    [
-      "file",
-      "mcp",
-      "model",
-      "knowledge_backend",
-      "connect",
-      "connection_ref",
-    ].includes(templateData.type ?? "")
+    ["mcp", "model", "knowledge_backend", "connect", "connection_ref"].includes(
+      templateData.type ?? "",
+    )
   ) {
     return (
       <p className="text-sm text-muted-foreground" role="status">
-        文件、模型、连接与 MCP 配置尚未开放；已有引用保留在流程中。
+        模型、连接与 MCP 配置尚未开放；已有引用保留在流程中。
       </p>
     );
   }
