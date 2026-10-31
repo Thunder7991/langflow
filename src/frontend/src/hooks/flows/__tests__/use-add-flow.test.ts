@@ -33,6 +33,7 @@ let mockScopedGlobalVariables: GlobalVariable[] | undefined = PROJECT_VARIABLES;
 let mockFolderId: string | undefined = "folder-1";
 let mockMyCollectionId = "folder-1";
 let mockFolders: { id: string }[] = [{ id: "folder-1" }];
+let mockPlatformActions: string[] | null = null;
 
 jest.mock("@tanstack/react-query", () => ({
   ...jest.requireActual("@tanstack/react-query"),
@@ -108,8 +109,13 @@ jest.mock("@/stores/foldersStore", () => ({
 
 jest.mock("@/stores/authStore", () => ({
   __esModule: true,
-  default: (selector: Selector<AuthState>) =>
-    selector({ userData: { optins: { dialog_dismissed: true } } }),
+  default: Object.assign(
+    (selector: Selector<AuthState>) =>
+      selector({ userData: { optins: { dialog_dismissed: true } } }),
+    {
+      getState: () => ({ platformWorkflowActions: mockPlatformActions }),
+    },
+  ),
 }));
 
 jest.mock("@/stores/utilityStore", () => ({
@@ -215,6 +221,8 @@ it("uses router navigation after a missing-folder error and settles the request"
 });
 
 beforeEach(() => {
+  jest.clearAllMocks();
+  mockPlatformActions = null;
   mockScopedGlobalVariables = PROJECT_VARIABLES;
   mockFolderId = "folder-1";
   mockMyCollectionId = "folder-1";
@@ -236,6 +244,32 @@ beforeEach(() => {
         }
       : undefined,
   );
+});
+
+it("rejects revoked platform creation before creating a project or deleting a flow", async () => {
+  mockPlatformActions = ["read", "update"];
+  const { result } = renderHook(() => useAddFlow());
+  await expect(
+    result.current({ flow: FLOW_STUB, override: true }),
+  ).rejects.toThrow();
+  expect(mockPostAddFolder).not.toHaveBeenCalled();
+  expect(mockDeleteFlow).not.toHaveBeenCalled();
+  expect(mockPostAddFlow).not.toHaveBeenCalled();
+});
+
+it("creates platform flows with MCP disabled and prevents destructive override", async () => {
+  mockPlatformActions = ["read", "create", "update"];
+  resolveAddFlow();
+  const { result } = renderHook(() => useAddFlow());
+  await result.current();
+  expect(mockPostAddFlow).toHaveBeenCalledWith(
+    expect.objectContaining({ mcp_enabled: false }),
+    expect.anything(),
+  );
+  await expect(
+    result.current({ flow: FLOW_STUB, override: true }),
+  ).rejects.toThrow();
+  expect(mockDeleteFlow).not.toHaveBeenCalled();
 });
 
 /** Make postAddFlow call onSuccess with the given flow. */

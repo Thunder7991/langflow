@@ -52,6 +52,26 @@ describe("usePostAddFlow", () => {
     jest.clearAllMocks();
   });
 
+  it("preserves an explicit false MCP setting in the create request", async () => {
+    mockApiPost.mockResolvedValue({ data: { id: "new-flow" } });
+    await usePostAddFlow().mutate({
+      name: "Flow",
+      description: "",
+      data: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+      is_component: false,
+      folder_id: "folder",
+      endpoint_name: undefined,
+      icon: undefined,
+      gradient: undefined,
+      tags: [],
+      mcp_enabled: false,
+    });
+    expect(mockApiPost).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ mcp_enabled: false }),
+    );
+  });
+
   it("posts locked when provided", async () => {
     mockApiPost.mockResolvedValue({ data: { id: "new-flow" } });
 

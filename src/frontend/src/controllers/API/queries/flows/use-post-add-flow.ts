@@ -48,7 +48,7 @@ export const usePostAddFlow: useMutationFunctionType<
       endpoint_name: payload.endpoint_name || null,
       tags: payload.tags || null,
       locked: payload.locked ?? null,
-      mcp_enabled: payload.mcp_enabled || null,
+      mcp_enabled: payload.mcp_enabled ?? null,
     });
     return response.data;
   };

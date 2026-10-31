@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -168,6 +168,7 @@ async def _apply_owner_permissions(
 
 @router.post("/permissions", response_model=EffectivePermissionsResponse)
 async def get_effective_permissions(
+    request: Request,
     body: EffectivePermissionsRequest,
     current_user: CurrentActiveUser,
     session: DbSessionReadOnly,
@@ -186,6 +187,11 @@ async def get_effective_permissions(
             detail=f"resource_ids capped at {_MAX_RESOURCE_IDS}",
         )
 
+    from langflow.services.auth.platform_workflows import effective_permissions
+
+    personal = await effective_permissions(request, session, body, current_user.id)
+    if personal is not None:
+        return EffectivePermissionsResponse(**personal)
     authz = get_authorization_service()
     actions = tuple(body.actions) if body.actions else _DEFAULT_ACTIONS
     permissions = await authz.get_effective_permissions(

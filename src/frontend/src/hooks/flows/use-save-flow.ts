@@ -123,6 +123,13 @@ const useSaveFlow = () => {
     flow?: FlowType,
     options?: SaveFlowOptions,
   ): Promise<void> => {
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions != null && !actions.includes("update")) {
+      const message = "当前账号没有保存流程的权限，未保存内容仍保留在画布中。";
+      if (!options?.suppressErrorToast)
+        setErrorData({ title: t("errors.failedToSaveFlow"), list: [message] });
+      throw new Error(message);
+    }
     const currentFlow = useFlowStore.getState().currentFlow;
     const currentSavedFlow = useFlowsManagerStore.getState().currentFlow;
     const requestedFlow = flow || currentFlow;

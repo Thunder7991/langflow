@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import useAuthStore from "@/stores/authStore";
 import type { FlowConflict } from "@/stores/flowConflictStore";
 import useFlowConflictStore from "@/stores/flowConflictStore";
 import useFlowStore from "@/stores/flowStore";
@@ -10,8 +11,35 @@ import { axe } from "@/utils/a11y-test";
 import { readConflictDraft } from "@/utils/conflict-draft";
 import { RawDiff } from "../ChangeRow";
 import { ConflictBanner, ConflictCanvasFrame } from "../ConflictBanner";
+import ConflictDialogFooter from "../ConflictDialogFooter";
 import DuplicateFlowModal from "../DuplicateFlowModal";
 import RestoreDraftBanner from "../RestoreDraftBanner";
+
+it("keeps platform conflict overwrite and fork unavailable while retaining safe exits", () => {
+  useAuthStore.setState({
+    platformWorkflowActions: ["read", "create", "update"],
+  });
+  try {
+    render(
+      <ConflictDialogFooter
+        isPending={false}
+        unresolvedConflicts={0}
+        isForking={false}
+        isOverwriting={false}
+        isLoadingLatest={false}
+        onCancel={jest.fn()}
+        onLoadLatest={jest.fn()}
+        onDuplicate={jest.fn()}
+        onOverwrite={jest.fn()}
+      />,
+    );
+    expect(screen.getByTestId("confirm-duplicate-flow")).toBeDisabled();
+    expect(screen.getByTestId("confirm-overwrite-flow")).toBeDisabled();
+    expect(screen.getByTestId("dialog-load-latest-button")).toBeEnabled();
+  } finally {
+    useAuthStore.setState({ platformWorkflowActions: null });
+  }
+});
 
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),

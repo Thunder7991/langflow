@@ -58,6 +58,14 @@ const useAddFlow = () => {
     override?: boolean;
     new_blank?: boolean;
   }): Promise<string> => {
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions != null && (!actions.includes("create") || params?.override)) {
+      const message = "当前权限不能新建流程，或该操作需要尚未开放的覆盖权限。";
+      useAlertStore
+        .getState()
+        .setErrorData({ title: FLOW_CREATION_ERROR, list: [message] });
+      throw new Error(message);
+    }
     const flow = cloneDeep(params?.flow) ?? undefined;
     const flowData = flow
       ? await processDataFromFlow(flow)
@@ -129,6 +137,8 @@ const useAddFlow = () => {
     });
 
     const newFlow = createNewFlow(flowData!, folder_id, flow);
+    // 原生新建默认启用MCP；平台普通流程必须显式关闭，避免隐式发布。
+    if (actions != null) newFlow.mcp_enabled = false;
     const newName = getFolderScopedDuplicateName(
       newFlow,
       flows ?? [],

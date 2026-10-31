@@ -1,4 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
+import { syncPlatformWorkflowActions } from "@/customization/utils/platform-workflow-actions";
 import type { useQueryFunctionType } from "@/types/api";
 import { api } from "../../api";
 import { getURL } from "../../helpers/constants";
@@ -11,6 +12,7 @@ export interface SessionResponse {
     username: string;
     is_active: boolean;
     is_superuser: boolean;
+    // biome-ignore lint/suspicious/noExplicitAny: existing edition-specific user fields
     [key: string]: any;
   };
   store_api_key?: string;
@@ -25,6 +27,7 @@ export const useGetAuthSession: useQueryFunctionType<
   async function getAuthSessionFn(): Promise<SessionResponse> {
     try {
       const response = await api.get<SessionResponse>(getURL("SESSION"));
+      syncPlatformWorkflowActions(response.headers?.["x-workflow-actions"]);
       return response.data;
     } catch (error) {
       // If the endpoint fails, return unauthenticated

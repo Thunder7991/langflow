@@ -8,6 +8,8 @@ export interface AuthStoreType {
   autoLogin: boolean | null;
   apiKey: string | null;
   authenticationErrorCount: number;
+  platformWorkflowActions: string[] | null;
+  setPlatformWorkflowActions: (actions: string[] | null) => void;
 
   setIsAdmin: (isAdmin: boolean) => void;
   setIsAuthenticated: (isAuthenticated: boolean) => void;

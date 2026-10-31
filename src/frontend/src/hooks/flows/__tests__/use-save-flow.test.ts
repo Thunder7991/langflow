@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: store mocks intentionally accept multiple selector shapes
 import { renderHook, waitFor } from "@testing-library/react";
+import useAuthStore from "@/stores/authStore";
 import useSaveFlow from "../use-save-flow";
 
 const mockSetFlows = jest.fn();
@@ -59,6 +60,7 @@ jest.mock("@/stores/flowsManagerStore", () => {
 
 describe("useSaveFlow", () => {
   beforeEach(() => {
+    useAuthStore.setState({ platformWorkflowActions: null });
     jest.clearAllMocks();
 
     const savedFlow = {
@@ -113,6 +115,17 @@ describe("useSaveFlow", () => {
         },
       });
     });
+  });
+
+  it("keeps the unsaved graph when platform update permission is revoked", async () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read", "create"] });
+    const draft = flowStoreState.currentFlow;
+    const { result } = renderHook(() => useSaveFlow());
+    await expect(result.current()).rejects.toThrow();
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockSetCurrentFlow).not.toHaveBeenCalled();
+    expect(flowStoreState.currentFlow).toBe(draft);
+    useAuthStore.setState({ platformWorkflowActions: null });
   });
 
   it("persists empty-node flows instead of leaving the save promise pending", async () => {

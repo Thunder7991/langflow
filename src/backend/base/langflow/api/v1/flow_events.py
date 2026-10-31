@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlmodel import or_, select
 
@@ -44,6 +44,7 @@ async def _verify_flow_owner(session: DbSession, flow_id: UUID, user_id: UUID) -
 
 @router.get("/{flow_id}/events", response_model=FlowEventsResponse)
 async def get_flow_events(
+    request: Request,
     flow_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
@@ -51,6 +52,12 @@ async def get_flow_events(
     *,
     service: Annotated[FlowEventsService, Depends(get_flow_events_service)],
 ) -> FlowEventsResponse:
+    from langflow.services.auth.platform_workflows import context
+
+    if context(request) is not None:
+        owned = await session.get(Flow, flow_id)
+        if owned is None or owned.user_id != current_user.id or owned.workspace_id is not None:
+            raise HTTPException(404, "Flow not found")
     await _verify_flow_owner(session, flow_id, current_user.id)
     events, settled = service.get_since(str(flow_id), since)
     return FlowEventsResponse(

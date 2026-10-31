@@ -72,6 +72,15 @@ def test_native_credentials_cannot_bypass_missing_sso_cookie(sso_app):
     assert response.status_code == 401
 
 
+def test_legacy_platform_keeps_read_only_actions(sso_app):
+    client, _ = sso_app
+    login(client)
+    assert client.get("/api/v1/flows/").headers["x-workflow-actions"] == "read"
+    denied = client.post("/api/v1/flows/", json={}, headers={"origin": "https://flow.example.com"})
+    assert denied.status_code == 403
+    assert denied.headers["x-workflow-actions"] == "read"
+
+
 def test_tampered_cookie_is_rejected_and_websocket_is_closed(sso_app):
     client, _ = sso_app
     client.cookies.set("platform_sso", "tampered")

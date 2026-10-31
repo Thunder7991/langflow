@@ -14,6 +14,7 @@ import {
   getFetchCredentials,
 } from "@/customization/utils/get-fetch-credentials";
 import { handlePlatformSsoError } from "@/customization/utils/platform-sso-error";
+import { syncPlatformWorkflowActions } from "@/customization/utils/platform-workflow-actions";
 import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { BuildStatus, type EventDeliveryType } from "../../constants/enums";
@@ -97,11 +98,20 @@ function ApiInterceptor() {
 
     const interceptor = api.interceptors.response.use(
       (response) => {
+        if (!isExternalURL(response.config.url ?? ""))
+          syncPlatformWorkflowActions(response.headers["x-workflow-actions"]);
         setHealthCheckTimeout(null);
         return response;
       },
       async (error: AxiosError) => {
+        if (!isExternalURL(error.config?.url ?? ""))
+          syncPlatformWorkflowActions(
+            error.response?.headers["x-workflow-actions"],
+          );
         if (handlePlatformSsoError(error.response?.data))
+          return Promise.reject(error);
+        // 平台已在线判定的业务403不能进入原生refresh重试，否则拒绝会被当成登录过期。
+        if (error.response?.headers["x-workflow-actions"] !== undefined)
           return Promise.reject(error);
         const isAuthenticationError =
           error?.response?.status === 403 || error?.response?.status === 401;

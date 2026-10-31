@@ -15,6 +15,7 @@
 import { keepPreviousData } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { useGetEffectivePermissions } from "@/controllers/API/queries/permissions";
+import useAuthStore from "@/stores/authStore";
 import type {
   PermissionAction,
   PermissionResourceType,
@@ -49,7 +50,31 @@ const PermissionsContext = createContext<PermissionsContextValue>(
 );
 
 export function usePermissions(): PermissionsContextValue {
-  return useContext(PermissionsContext);
+  const context = useContext(PermissionsContext);
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  return useMemo(() => {
+    if (actions == null) return context;
+    // 平台能力是上限；原生权限查询失败时不能沿用OSS的fail-open行为。
+    return {
+      ...context,
+      can: (resourceId, action) => {
+        const required = (
+          { read: "read", write: "update", create: "create" } as Record<
+            string,
+            string
+          >
+        )[action];
+        if (!required || !actions.includes(required)) return false;
+        if (
+          resourceId &&
+          context !== DEFAULT_CONTEXT_VALUE &&
+          !context.permissions?.[resourceId.toLowerCase()]
+        )
+          return false;
+        return context.can(resourceId, action);
+      },
+    };
+  }, [context, actions]);
 }
 
 /**

@@ -306,6 +306,7 @@ const HeaderComponent = ({
                         onNewFlow ? onNewFlow() : setNewProjectModal(true)
                       }
                       id="new-project-btn"
+                      disabled={!can(null, "create")}
                       data-testid="new-project-btn"
                     >
                       <ForwardedIconComponent

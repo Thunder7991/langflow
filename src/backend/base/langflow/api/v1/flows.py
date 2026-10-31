@@ -328,6 +328,7 @@ def _flow_read_for_caller(flow: Flow | FlowRead, caller_id: UUID) -> FlowRead:
 )
 async def create_flow(
     *,
+    request: Request,
     session: DbSession,
     flow: FlowCreate,
     current_user: CurrentActiveUser,
@@ -335,6 +336,11 @@ async def create_flow(
     storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
     try:
+        from langflow.services.auth.platform_workflows import require_action, validate_graph
+
+        if require_action(request, "create"):
+            # FastAPI依赖与处理器可能拥有不同body实例; 持久化的图也必须替换成可信模板副本。
+            validate_graph(flow.data)
         catalog_policy_snapshot = get_catalog_policy_service().snapshot
         _validate_catalog_policy_for_write(flow.data, snapshot=catalog_policy_snapshot)
         await persist_and_strip_mcp_secrets(flow.data, current_user.id, session, flow_id=flow.id)
@@ -393,6 +399,7 @@ async def create_flow(
 )
 async def read_flows(
     *,
+    request: Request,
     current_user: CurrentActiveUser,
     session: DbSession,
     remove_example_flows: bool = False,
@@ -459,6 +466,12 @@ async def read_flows(
             )
         else:
             stmt = select(Flow).where(fallback_clause)
+
+        from langflow.services.auth.platform_workflows import context
+
+        # 平台B2只承认本人资源; 原生共享插件不能扩大这个上限(包括分页total)。
+        if context(request) is not None:
+            stmt = stmt.where(Flow.user_id == current_user.id, Flow.workspace_id.is_(None))
 
         if remove_example_flows:
             stmt = stmt.where(Flow.folder_id != starter_folder_id)
@@ -646,6 +659,7 @@ async def read_public_flow(
 )
 async def update_flow(
     *,
+    request: Request,
     session: DbSession,
     flow_id: UUID,
     db_flow: AuthorizedWriteFlow,
@@ -655,6 +669,9 @@ async def update_flow(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ):
     """Update a flow."""
+    from langflow.services.auth.platform_workflows import validate_update
+
+    await validate_update(request, session, flow, db_flow, current_user.id)
     actor = UserRead.model_validate(current_user, from_attributes=True)
     expected_version_token = parse_if_match(if_match)
     try:
@@ -713,6 +730,7 @@ async def update_flow(
             )
             if not db_flow_for_attempt:
                 raise HTTPException(status_code=404, detail="Flow not found")
+            await validate_update(request, session, flow, db_flow_for_attempt, actor.id)
             # Compared against the row we just re-read under lock, so a writer that
             # committed between the client's read and this attempt is still caught.
             await ensure_version_precondition(session, db_flow_for_attempt, expected_version_token)

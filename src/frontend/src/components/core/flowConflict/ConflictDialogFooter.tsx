@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { Button } from "@/components/ui/button";
+import useAuthStore from "@/stores/authStore";
 
 type FooterProps = {
   isPending: boolean;
@@ -35,7 +36,10 @@ export function ConflictDialogFooter({
   onOverwrite,
 }: FooterProps) {
   const { t } = useTranslation();
+  const platformEditing =
+    useAuthStore((state) => state.platformWorkflowActions) != null;
   const [confirming, setConfirming] = useState(false);
+  // 平台B2尚未开放fork/overwrite; 保留加载最新版本的二次确认及本地草稿出口。
   // Writing the original is the one exit that overwrites somebody else, so it
   // stays shut until every contested component has been answered. Duplicating
   // is left open on purpose: it is the way out for a reader who cannot decide,
@@ -89,6 +93,11 @@ export function ConflictDialogFooter({
 
   return (
     <div className="flex flex-col gap-2 border-t border-muted px-5 py-4">
+      {platformEditing && (
+        <p className="text-xs text-muted-foreground">
+          当前工作流暂不支持冲突副本和强制覆盖。可取消并保留本地草稿，或确认加载最新版本。
+        </p>
+      )}
       {blocked && (
         <p
           className="text-xs leading-[18px] text-accent-amber-foreground"
@@ -121,7 +130,7 @@ export function ConflictDialogFooter({
             variant="conflictSecondary"
             size="dialogAction"
             onClick={onDuplicate}
-            disabled={isPending}
+            disabled={isPending || platformEditing}
             data-testid="confirm-duplicate-flow"
           >
             <ForwardedIconComponent name="GitBranch" aria-hidden="true" />
@@ -133,7 +142,7 @@ export function ConflictDialogFooter({
             variant="conflictPrimary"
             size="dialogAction"
             onClick={onOverwrite}
-            disabled={isPending || blocked}
+            disabled={isPending || blocked || platformEditing}
             // Named rather than left to the reader to infer from a dead button.
             title={
               blocked

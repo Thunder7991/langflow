@@ -158,6 +158,22 @@ def _identity_matches(identity: dict, settings: PlatformSsoSettings, claims: dic
         raise HTTPException(401, "SSO identity changed")
 
 
+def _actions(identity: dict) -> list[str]:
+    # An A1 platform can still serve read-only sessions during a coordinated upgrade.
+    if "authorizationVersion" not in identity:
+        return ["read"]
+    actions = identity.get("actions")
+    if (
+        identity["authorizationVersion"] != 1
+        or identity.get("resourceScope") != "personal"
+        or not isinstance(actions, list)
+        or not all(isinstance(a, str) and a in {"read", "create", "update"} for a in actions)
+        or "read" not in actions
+    ):
+        raise HTTPException(503, "Unsupported platform workflow authorization")
+    return actions
+
+
 async def _session(connection: HTTPConnection, settings: PlatformSsoSettings):
     token = connection.cookies.get(_cookie_name(connection, "platform_sso"), "")
     try:
@@ -295,10 +311,18 @@ class PlatformSsoMiddleware:
         if root and path.startswith(root + "/"):
             path = path[len(root) :]
         original_send = send
+        actions = None
 
         async def send_with_security(message):
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
+                if (
+                    path.startswith("/api/")
+                    and not path.startswith("/api/v1/platform-sso/")
+                    and path.rstrip("/") != "/api/v1/auto_login"
+                ):
+                    # 身份/平台故障同样收紧UI能力, 直到下一次在线核验成功。
+                    headers.append((b"x-workflow-actions", ",".join(actions or []).encode()))
                 headers.append(
                     (b"content-security-policy", f"frame-ancestors {self.settings.host_origin.rstrip('/')}".encode())
                 )
@@ -327,6 +351,8 @@ class PlatformSsoMiddleware:
             return await JSONResponse({"detail": {"auto_login": False}}, 403)(scope, receive, send)
         try:
             claims, identity = await _session(connection, self.settings)
+            actions = _actions(identity)
+            scope.setdefault("state", {})["platform_workflow"] = {"actions": actions, "user_id": claims["sub"]}
             method = scope["method"]
             if (
                 method not in {"GET", "HEAD"}
@@ -360,17 +386,27 @@ class PlatformSsoMiddleware:
                 response.delete_cookie(_cookie_name(connection, "platform_sso"), path=_path(connection))
                 return await response(scope, receive, send)
             # 明确白名单,未知 GET 也不放行,避免公开执行或 GET 管理入口产生副作用。
-            allowed = re.fullmatch(
-                r"/api/v1/(session|version|config|all|sidebar_categories|users/whoami|flows(?:/.*)?|projects(?:/.*)?|folders(?:/.*)?|variables(?:/.*)?|starter-projects(?:/.*)?)/?",
+            allowed = method in {"GET", "HEAD"} and re.fullmatch(
+                r"/api/v1/(session|version|config|all|users/whoami|flows/|flows/basic_examples/|flows/[0-9a-fA-F-]{36}(?:/(?:version-state|note_translations|events|versions(?:/[0-9a-fA-F-]{36})?))?/?|projects/|projects/[0-9a-fA-F-]{36}|folders/|folders/[0-9a-fA-F-]{36}|variables/|starter-projects/)",
                 path,
             )
+            action = None
+            if method == "POST" and path.rstrip("/") in {"/api/v1/flows", "/api/v1/projects"}:
+                action = "create"
+            elif method == "PATCH" and re.fullmatch(r"/api/v1/flows/[0-9a-fA-F-]{36}", path):
+                action = "update"
+            elif method == "POST" and path == "/api/v1/authz/me/permissions":
+                action = "read"
+            elif method == "POST" and path == "/api/v1/validate/prompt":
+                action = "update"
+            if action is not None:
+                allowed = action in actions
             if (
-                method not in {"GET", "HEAD"}
-                or not allowed
-                or "/public_flow" in path
+                not allowed
                 or "x-api-key" in connection.query_params
+                or "deployment_provider_id" in connection.query_params
             ):
-                raise HTTPException(403, "Only personal read access is enabled in SSO milestone")
+                raise HTTPException(403, "Platform workflow action is not enabled")
             # 身份只由已验证的 Cookie/平台关联决定,丢弃浏览器的原生认证头和 Cookie。
             scope["headers"] = [
                 (k, v) for k, v in scope["headers"] if k.lower() not in {b"authorization", b"x-api-key", b"cookie"}

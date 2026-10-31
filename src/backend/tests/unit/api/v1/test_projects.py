@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import BackgroundTasks, HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, Request, status
 from httpx import AsyncClient
 from langflow.initial_setup.constants import STARTER_FOLDER_NAME
 from langflow.services.database.models.deployment.model import Deployment
@@ -262,6 +262,7 @@ async def test_read_projects_qualifies_visible_same_named_projects_by_owner():
         side_effect=return_candidates,
     ) as filter_visible:
         result = await read_projects(
+            request=Request({"type": "http"}),
             session=session,
             current_user=SimpleNamespace(id=actor_id),
         )

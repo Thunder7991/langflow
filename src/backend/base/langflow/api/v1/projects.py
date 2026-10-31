@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi_pagination import Params
 from fastapi_pagination.ext.sqlmodel import apaginate
@@ -219,6 +219,7 @@ async def _new_project(
     project_id: UUID | None = None,
     fail_on_name_conflict: bool = False,
     owns_transaction: bool = True,
+    personal_only: bool = False,
 ) -> FolderRead:
     """Create a project (folder), optionally at a caller-specified id (PUT upsert).
 
@@ -306,7 +307,7 @@ async def _new_project(
         mcp_auth = project.auth_settings.copy()
         new_project.auth_settings = encrypt_auth_settings(mcp_auth)
     # If AUTO_LOGIN is false, automatically enable API key authentication
-    elif not settings_service.auth_settings.AUTO_LOGIN:
+    elif not personal_only and not settings_service.auth_settings.AUTO_LOGIN:
         mcp_auth = {"auth_type": "apikey"}
         auth_was_chosen_for_caller = True
         new_project.auth_settings = encrypt_auth_settings(mcp_auth)
@@ -321,7 +322,7 @@ async def _new_project(
     await session.refresh(new_project)
 
     # Auto-register MCP server for this project with configured default auth
-    if get_settings_service().settings.add_projects_to_mcp_servers:
+    if not personal_only and get_settings_service().settings.add_projects_to_mcp_servers:
         try:
             await register_mcp_servers_for_project(
                 new_project, mcp_auth, current_user, session, owns_transaction=owns_transaction
@@ -432,10 +433,16 @@ async def _new_project(
 )
 async def create_project(
     *,
+    request: Request,
     session: DbSession,
     project: FolderCreate,
     current_user: CurrentActiveUser,
 ):
+    from langflow.services.auth.platform_workflows import require_action
+
+    personal_only = require_action(request, "create")
+    if personal_only and (project.auth_settings or project.flows_list or project.components_list):
+        raise HTTPException(403, "Only empty personal projects can be created")
     await audited_permission(
         ensure_project_permission(
             current_user, ProjectAction.CREATE, workspace_id=getattr(project, "workspace_id", None)
@@ -450,6 +457,7 @@ async def create_project(
             # after the project row, so the MCP registration must not commit it:
             # a guard that refuses a move has to take the project back with it.
             owns_transaction=False,
+            personal_only=personal_only,
         )
     except HTTPException:
         # Re-raise HTTP exceptions (like 409 conflicts) without modification
@@ -465,6 +473,7 @@ async def create_project(
 @router.get("/", response_model=list[FolderListRead], status_code=200)
 async def read_projects(
     *,
+    request: Request,
     session: DbSession,
     current_user: CurrentActiveUser,
 ):
@@ -495,6 +504,10 @@ async def read_projects(
             )
         else:
             stmt = select(Folder).where(or_(owned_clause, Folder.user_id == None))  # noqa: E711
+        from langflow.services.auth.platform_workflows import context
+
+        if context(request) is not None:
+            stmt = stmt.where(Folder.user_id == current_user.id, Folder.workspace_id.is_(None))
         projects = (await session.exec(stmt)).all()
         projects = [
             project for project in projects if not (project.name == STARTER_FOLDER_NAME and project.user_id is None)
@@ -663,6 +676,7 @@ async def read_project_deployment_snapshot(
 @router.get("/{project_id}", response_model=FolderWithPaginatedFlows | FolderReadWithFlows, status_code=200)
 async def read_project(
     *,
+    request: Request,
     session: DbSession,
     project_id: UUID,
     current_user: CurrentActiveUser,
@@ -688,8 +702,12 @@ async def read_project(
         # policy check.
         share_aware = await authz.supports_cross_user_fetch() and await authz.is_enabled()
         stmt = select(Folder).options(selectinload(Folder.flows)).where(Folder.id == project_id)
-        if not share_aware:
+        from langflow.services.auth.platform_workflows import context
+
+        if not share_aware or context(request) is not None:
             stmt = stmt.where(Folder.user_id == current_user.id)
+        if context(request) is not None:
+            stmt = stmt.where(Folder.workspace_id.is_(None))
         project = (await session.exec(stmt)).first()
     except Exception as e:
         if "No result found" in str(e):

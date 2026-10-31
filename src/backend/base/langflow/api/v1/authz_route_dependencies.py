@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from langflow.api.utils import CurrentActiveUser, DbSession
 from langflow.api.v1.flows_helpers import _canonicalize_flow_destination, _read_flow
@@ -21,6 +21,7 @@ _FLOW_DELETE_DENIED_DETAIL = "You don't have permission to delete this flow."
 async def _get_authorized_flow(
     act: FlowAction,
     *,
+    request: Request,
     flow_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
@@ -29,6 +30,10 @@ async def _get_authorized_flow(
     flow = await _read_flow(session, flow_id, current_user.id)
     if flow is None:
         raise HTTPException(status_code=404, detail="Flow not found")
+    from langflow.services.auth.platform_workflows import context
+
+    if context(request) is not None and (flow.user_id != current_user.id or flow.workspace_id is not None):
+        raise HTTPException(404, "Flow not found")
     try:
         await ensure_flow_permission(
             current_user,
@@ -58,38 +63,51 @@ async def _get_authorized_flow(
 
 
 async def get_authorized_flow_for_read(
+    request: Request,
     flow_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
 ) -> Flow:
     """Return a flow the caller may read (404 when denied or missing)."""
-    return await _get_authorized_flow(FlowAction.READ, flow_id=flow_id, current_user=current_user, session=session)
+    return await _get_authorized_flow(
+        FlowAction.READ, request=request, flow_id=flow_id, current_user=current_user, session=session
+    )
 
 
 async def get_authorized_flow_for_write(
+    request: Request,
     flow_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
 ) -> Flow:
     """Return a flow the caller may write (403 when readable but not writable, 404 otherwise)."""
-    return await _get_authorized_flow(FlowAction.WRITE, flow_id=flow_id, current_user=current_user, session=session)
+    return await _get_authorized_flow(
+        FlowAction.WRITE, request=request, flow_id=flow_id, current_user=current_user, session=session
+    )
 
 
 async def get_authorized_flow_for_delete(
+    request: Request,
     flow_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
 ) -> Flow:
     """Return a flow the caller may delete (403 when readable but not deletable, 404 otherwise)."""
-    return await _get_authorized_flow(FlowAction.DELETE, flow_id=flow_id, current_user=current_user, session=session)
+    return await _get_authorized_flow(
+        FlowAction.DELETE, request=request, flow_id=flow_id, current_user=current_user, session=session
+    )
 
 
 async def require_flow_create_permission(
+    request: Request,
     current_user: CurrentActiveUser,
     flow: FlowCreate,
     session: DbSession,
 ) -> tuple[UUID | None, UUID]:
     """Authorize CREATE at the destination workspace/folder before inserting a flow."""
+    from langflow.services.auth.platform_workflows import validate_create
+
+    await validate_create(request, session, flow, current_user.id)
     destination = await _canonicalize_flow_destination(
         session,
         flow,
@@ -97,6 +115,10 @@ async def require_flow_create_permission(
         widen_for_authz=True,
     )
     _, destination_folder_id = destination
+    from langflow.services.auth.platform_workflows import context, require_personal_destination
+
+    if context(request) is not None:
+        await require_personal_destination(session, destination_folder_id, current_user.id)
     # Read the owner off the *resolved* destination rather than the payload:
     # canonicalization may have redirected an unusable folder_id to the
     # caller's default project, and only the stored row can say who owns the

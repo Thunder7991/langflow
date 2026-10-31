@@ -20,6 +20,9 @@ const useAuthStore = create<AuthStoreType>((set, get) => ({
   autoLogin: null,
   apiKey: null,
   authenticationErrorCount: 0,
+  platformWorkflowActions: null,
+  setPlatformWorkflowActions: (platformWorkflowActions) =>
+    set({ platformWorkflowActions }),
 
   setIsAdmin: (isAdmin) => set({ isAdmin }),
   setIsAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
@@ -50,6 +53,7 @@ const useAuthStore = create<AuthStoreType>((set, get) => ({
       isAuthenticated: false,
       autoLogin: false,
       apiKey: null,
+      platformWorkflowActions: null,
     });
   },
 }));

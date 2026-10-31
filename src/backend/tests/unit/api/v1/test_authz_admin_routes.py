@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 
 import anyio
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 
 if TYPE_CHECKING:
@@ -1692,7 +1692,9 @@ async def test_me_permissions_returns_per_resource_actions(stub_authz):
         resource_type="flow",
         resource_ids=resource_ids,
     )
-    result = await authz_me.get_effective_permissions(body=body, current_user=user, session=_FakeAsyncSession())
+    result = await authz_me.get_effective_permissions(
+        request=Request({"type": "http"}), body=body, current_user=user, session=_FakeAsyncSession()
+    )
     assert result.resource_type == "flow"
     assert set(result.permissions[resource_ids[0]]) == {"read", "execute"}
     assert "delete" in result.permissions[resource_ids[1]]
@@ -1719,7 +1721,9 @@ async def test_me_permissions_adds_owner_override_actions(stub_authz):
         resource_ids=[owned_flow_id, other_flow_id],
         actions=["read", "write", "execute", "delete"],
     )
-    result = await authz_me.get_effective_permissions(body=body, current_user=user, session=session)
+    result = await authz_me.get_effective_permissions(
+        request=Request({"type": "http"}), body=body, current_user=user, session=session
+    )
 
     assert set(result.permissions[owned_flow_id]) == {"read", "write", "execute", "delete"}
     assert result.permissions[other_flow_id] == []
@@ -1736,7 +1740,9 @@ async def test_me_permissions_returns_empty_entries_for_plugin_omissions(stub_au
     user = _make_user()
     body = EffectivePermissionsRequest(resource_type="flow", resource_ids=[flow_id])
 
-    result = await authz_me.get_effective_permissions(body=body, current_user=user, session=_FakeAsyncSession())
+    result = await authz_me.get_effective_permissions(
+        request=Request({"type": "http"}), body=body, current_user=user, session=_FakeAsyncSession()
+    )
 
     assert result.permissions == {flow_id: []}
 
@@ -1754,7 +1760,9 @@ async def test_me_permissions_caps_resource_ids_at_500(stub_authz):
         resource_ids=[uuid4() for _ in range(501)],
     )
     with pytest.raises(HTTPException) as excinfo:
-        await authz_me.get_effective_permissions(body=body, current_user=user, session=_FakeAsyncSession())
+        await authz_me.get_effective_permissions(
+            request=Request({"type": "http"}), body=body, current_user=user, session=_FakeAsyncSession()
+        )
     assert excinfo.value.status_code == 400
     assert "capped at 500" in excinfo.value.detail
 
@@ -1768,7 +1776,9 @@ async def test_me_permissions_empty_request_returns_empty(stub_authz):
     user = _make_user()
 
     body = EffectivePermissionsRequest(resource_type="flow", resource_ids=[])
-    result = await authz_me.get_effective_permissions(body=body, current_user=user, session=_FakeAsyncSession())
+    result = await authz_me.get_effective_permissions(
+        request=Request({"type": "http"}), body=body, current_user=user, session=_FakeAsyncSession()
+    )
     assert result.permissions == {}
 
 
@@ -1856,7 +1866,9 @@ async def test_me_permissions_handler_uses_normalized_actions(stub_authz):
         resource_ids=[rid],
         actions=["READ", "read", " Write "],
     )
-    await authz_me.get_effective_permissions(body=body, current_user=user, session=_FakeAsyncSession())
+    await authz_me.get_effective_permissions(
+        request=Request({"type": "http"}), body=body, current_user=user, session=_FakeAsyncSession()
+    )
     # Normalization happened at the model layer; handler sees the bounded set.
     assert tuple(captured["actions"]) == ("read", "write")
 
