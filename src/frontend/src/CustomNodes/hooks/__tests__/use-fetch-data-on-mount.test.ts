@@ -1,4 +1,5 @@
 import { renderHook } from "@testing-library/react";
+import useAuthStore from "@/stores/authStore";
 import type { APIClassType } from "@/types/api";
 
 const mockMutateTemplate = jest.fn();
@@ -27,7 +28,25 @@ const nodeWithRefreshableField = (): APIClassType =>
   }) as unknown as APIClassType;
 
 describe("useFetchDataOnMount", () => {
-  beforeEach(() => mockMutateTemplate.mockClear());
+  beforeEach(() => {
+    mockMutateTemplate.mockClear();
+    useAuthStore.setState({ platformWorkflowActions: null });
+  });
+  afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
+
+  it("does not enqueue initialization for a read-only platform flow", () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read"] });
+    renderHook(() =>
+      useFetchDataOnMount(
+        nodeWithRefreshableField(),
+        "node-1",
+        jest.fn(),
+        "model_name",
+        {} as never,
+      ),
+    );
+    expect(mockMutateTemplate).not.toHaveBeenCalled();
+  });
 
   it("refreshes the template on mount", () => {
     renderHook(() =>

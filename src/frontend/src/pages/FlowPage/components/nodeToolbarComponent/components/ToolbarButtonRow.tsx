@@ -4,6 +4,8 @@ import ShadTooltip from "@/components/common/shadTooltipComponent";
 import ToggleShadComponent from "@/components/core/parameterRenderComponent/components/toggleShadComponent";
 import { Button } from "@/components/ui/button";
 import { ENABLE_INSPECTION_PANEL } from "@/customization/feature-flags";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
+import useAuthStore from "@/stores/authStore";
 import { useShortcutsStore } from "@/stores/shortcuts";
 import { cn } from "@/utils/utils";
 import ShortcutDisplay from "../shortcutDisplay";
@@ -42,10 +44,13 @@ export function ToolbarButtonRow({
   onToolMode,
 }: ToolbarButtonRowProps): JSX.Element {
   const { t } = useTranslation();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const shortcuts = useShortcutsStore((state) => state.shortcuts);
   return (
     <>
-      {canEditCode && (
+      {!isPlatform && canEditCode && (
         <ToolbarButton
           className={isCustomComponent ? "animate-pulse-pink" : ""}
           icon="Code"
@@ -72,7 +77,15 @@ export function ToolbarButtonRow({
           dataTestId="parameters-button"
         />
       )}
-      {!hasToolMode && (
+      {isPlatform && (
+        <span
+          className="text-xs text-muted-foreground"
+          title={PLATFORM_UNAVAILABLE_REASON}
+        >
+          调试暂未开放
+        </span>
+      )}
+      {!isPlatform && !hasToolMode && (
         <ToolbarButton
           icon="FreezeAll"
           label={t("nodeToolbar.freeze")}

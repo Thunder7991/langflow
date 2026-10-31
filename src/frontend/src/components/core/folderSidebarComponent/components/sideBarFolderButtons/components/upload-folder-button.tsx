@@ -3,10 +3,18 @@ import IconComponent from "@/components/common/genericIconComponent";
 import ShadTooltip from "@/components/common/shadTooltipComponent";
 import { Button } from "@/components/ui/button";
 
-export const UploadFolderButton = ({ onClick, disabled }) => {
+export const UploadFolderButton = ({
+  onClick,
+  disabled,
+  reason,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  reason?: string;
+}) => {
   const { t } = useTranslation();
   return (
-    <ShadTooltip content={t("folder.uploadFlow")} styleClasses="z-50">
+    <ShadTooltip content={reason ?? t("folder.uploadFlow")} styleClasses="z-50">
       <Button
         variant="ghost"
         size="icon"

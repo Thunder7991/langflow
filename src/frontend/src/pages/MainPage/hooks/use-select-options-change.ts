@@ -1,5 +1,10 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  PLATFORM_READ_ONLY_REASON,
+  PLATFORM_UNAVAILABLE_REASON,
+} from "@/customization/utils/platform-workflow-ui";
+import useAuthStore from "@/stores/authStore";
 
 const useSelectOptionsChange = (
   selectedFlowsComponentsCards: string[] | undefined,
@@ -12,6 +17,21 @@ const useSelectOptionsChange = (
   const { t } = useTranslation();
   const handleSelectOptionsChange = useCallback(
     (action) => {
+      const actions = useAuthStore.getState().platformWorkflowActions;
+      if (
+        actions != null &&
+        (action !== "edit" || !actions.includes("update"))
+      ) {
+        setErrorData({
+          title: t("errors.saveChanges"),
+          list: [
+            action === "edit"
+              ? PLATFORM_READ_ONLY_REASON
+              : PLATFORM_UNAVAILABLE_REASON,
+          ],
+        });
+        return;
+      }
       const hasSelected = selectedFlowsComponentsCards?.length! > 0;
       if (!hasSelected) {
         setErrorData({

@@ -17,8 +17,13 @@ import {
   useIsFlowPermissionPending,
   useIsFlowReadOnly,
 } from "@/contexts/permissionsContext";
+import {
+  isPlatformNodeAvailable,
+  PLATFORM_UNAVAILABLE_REASON,
+} from "@/customization/utils/platform-workflow-ui";
 import useDeleteFlow from "@/hooks/flows/use-delete-flow";
 import { useAddComponent } from "@/hooks/use-add-component";
+import useAuthStore from "@/stores/authStore";
 import { useDarkStore } from "@/stores/darkStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
@@ -68,6 +73,10 @@ export const SidebarDraggableComponent = forwardRef(
     ref,
   ) => {
     const { t } = useTranslation();
+    const isPlatform = useAuthStore(
+      (state) => state.platformWorkflowActions != null,
+    );
+    const unsupportedNode = isPlatform && !isPlatformNodeAvailable(itemName);
     const [open, setOpen] = useState(false);
     const { deleteFlow } = useDeleteFlow();
     const flows = useFlowsManagerStore((state) => state.flows);
@@ -85,12 +94,14 @@ export const SidebarDraggableComponent = forwardRef(
     // A placement constraint is a separate verdict and keeps hiding the add
     // button; the permission cases only disable it, so a read-only user still
     // sees the same layout everyone else does.
-    const isUnavailable = disabled || isReadOnly;
-    const unavailableTooltip = disabled
-      ? disabledTooltip
-      : isPermissionPending
-        ? t("sidebar.permissionsPending")
-        : t("sidebar.permissionDenied");
+    const isUnavailable = disabled || isReadOnly || unsupportedNode;
+    const unavailableTooltip = unsupportedNode
+      ? PLATFORM_UNAVAILABLE_REASON
+      : disabled
+        ? disabledTooltip
+        : isPermissionPending
+          ? t("sidebar.permissionsPending")
+          : t("sidebar.permissionDenied");
 
     const version = useDarkStore((state) => state.version);
     const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
@@ -107,6 +118,7 @@ export const SidebarDraggableComponent = forwardRef(
     };
 
     function handleSelectChange(value: string) {
+      if (isPlatform) return;
       switch (value) {
         case "download": {
           const type = removeCountFromString(itemName);
@@ -202,7 +214,13 @@ export const SidebarDraggableComponent = forwardRef(
               style={{
                 borderLeftColor: color,
               }}
-              onDragStart={onDragStart}
+              onDragStart={(event) => {
+                if (isUnavailable) {
+                  event.preventDefault();
+                  return;
+                }
+                onDragStart(event);
+              }}
               onDoubleClick={() => {
                 if (!isUnavailable) {
                   addComponent(apiClass, itemName);
@@ -292,7 +310,12 @@ export const SidebarDraggableComponent = forwardRef(
                     top: cursorPos.y,
                   }}
                 >
-                  <SelectItem variant="plain" value={"download"}>
+                  <SelectItem
+                    variant="plain"
+                    value={"download"}
+                    disabled={isPlatform}
+                    title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                  >
                     <div className="flex">
                       <IconComponent
                         name="Download"
@@ -305,6 +328,10 @@ export const SidebarDraggableComponent = forwardRef(
                     <SelectItem
                       variant="plain"
                       value={"delete"}
+                      disabled={isPlatform}
+                      title={
+                        isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined
+                      }
                       data-testid="draggable-component-menu-delete"
                     >
                       <div className="flex">

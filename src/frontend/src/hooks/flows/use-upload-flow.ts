@@ -1,5 +1,7 @@
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import { createFileUpload } from "@/helpers/create-file-upload";
 import { getObjectsFromFilelist } from "@/helpers/get-objects-from-filelist";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import type { FlowType } from "@/types/flow";
 import { processDataFromFlow } from "@/utils/reactflowUtils";
@@ -14,10 +16,12 @@ const useUploadFlow = () => {
   }: {
     files: File[];
   }): Promise<FlowType[]> => {
-    const objectList = await getObjectsFromFilelist<any>(files);
+    const objectList = await getObjectsFromFilelist<
+      FlowType | { flows: FlowType[] }
+    >(files);
     const flows: FlowType[] = [];
     objectList.forEach((object) => {
-      if (object.flows) {
+      if ("flows" in object) {
         object.flows.forEach((flow: FlowType) => {
           flows.push(flow);
         });
@@ -53,6 +57,8 @@ const useUploadFlow = () => {
     isComponent?: boolean;
     position?: { x: number; y: number };
   }): Promise<void> => {
+    if (useAuthStore.getState().platformWorkflowActions != null)
+      throw new Error(PLATFORM_UNAVAILABLE_REASON);
     try {
       const flows = await getFlowsToUpload({ files });
       for (const flow of flows) {

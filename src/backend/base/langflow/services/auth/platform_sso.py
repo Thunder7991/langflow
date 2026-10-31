@@ -399,6 +399,9 @@ class PlatformSsoMiddleware:
                 action = "read"
             elif method == "POST" and path == "/api/v1/validate/prompt":
                 action = "update"
+            elif method == "POST" and path == "/api/v1/custom_component/update":
+                # 仅放行到处理器的受控内置节点校验, 不开放任意组件代码入口。
+                action = "update"
             if action is not None:
                 allowed = action in actions
             if (

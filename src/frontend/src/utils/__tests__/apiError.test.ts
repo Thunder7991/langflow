@@ -1,6 +1,34 @@
 import { extractApiErrorMessages } from "../apiError";
 
 describe("extractApiErrorMessages", () => {
+  it("explains network uncertainty without falsely claiming a write failed or succeeded", () => {
+    expect(
+      extractApiErrorMessages({
+        platformWorkflow: true,
+        message: "Network Error",
+      })[0],
+    ).toContain("操作结果尚未确认");
+  });
+  it.each([
+    [401, "PLATFORM_SSO_REQUIRED", /登录.*失效/],
+    [403, "PLATFORM_SSO_ERROR", /权限/],
+    [503, "PLATFORM_SSO_ERROR", /服务.*不可用/],
+    [409, "flow_version_conflict", /版本.*冲突/],
+  ])(
+    "explains platform status %s without exposing raw backend detail",
+    (status, code, expected) => {
+      const messages = extractApiErrorMessages({
+        response: {
+          status,
+          headers: { "x-workflow-actions": "" },
+          data: { code, detail: { code, message: "raw internal detail" } },
+        },
+      });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatch(expected);
+      expect(messages[0]).not.toContain("raw internal detail");
+    },
+  );
   it("returns a default message for non-object errors", () => {
     expect(extractApiErrorMessages(null)).toEqual([
       "An unknown error occurred",

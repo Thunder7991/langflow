@@ -47,6 +47,7 @@ jest.mock("@/controllers/API/services/request-processor", () => ({
   })),
 }));
 
+import useAuthStore from "@/stores/authStore";
 import { usePostTemplateValue } from "../use-post-template-value";
 
 const node = {
@@ -62,6 +63,45 @@ describe("usePostTemplateValue scope continuity", () => {
     mockFlowState.currentFlowId = "flow-one";
     mockFlowState.currentFlow = { folder_id: "project-one" };
     mockGetNode.mockReturnValue({ data: { node } });
+    useAuthStore.setState({ platformWorkflowActions: null });
+  });
+
+  afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
+
+  it.each([["read"], ["read", "create"], []])(
+    "does not initialize a platform node without update: %j",
+    async (...actions) => {
+      useAuthStore.setState({ platformWorkflowActions: actions as string[] });
+      const mutation = usePostTemplateValue({
+        parameterId: "model",
+        nodeId: "shared-node",
+        node,
+      });
+      await expect(
+        mutation.mutateAsync({ value: "model-b" }),
+      ).resolves.toBeUndefined();
+      expect(mockApiPost).not.toHaveBeenCalled();
+    },
+  );
+
+  it("discards initialization after update is revoked while the request is pending", async () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+    let complete!: (response: unknown) => void;
+    mockApiPost.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const mutation = usePostTemplateValue({
+      parameterId: "model",
+      nodeId: "shared-node",
+      node,
+    });
+    const pending = mutation.mutateAsync({ value: "model-b" });
+    useAuthStore.setState({ platformWorkflowActions: ["read"] });
+    complete({ data: node });
+    await expect(pending).resolves.toBeUndefined();
   });
 
   it("retains the selected class when refreshing a multi-class component", async () => {

@@ -1,4 +1,5 @@
 import { renderHook } from "@testing-library/react";
+import useAuthStore from "@/stores/authStore";
 import useFileDrop from "../use-on-file-drop";
 
 const mockSaveFlow = jest.fn().mockResolvedValue(undefined);
@@ -64,6 +65,7 @@ jest.mock("../../../../../stores/foldersStore", () => {
 describe("useFileDrop.onDrop (drag-and-drop flow between projects)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useAuthStore.setState({ platformWorkflowActions: null });
 
     const flowInProjectA = {
       id: "flow-1",
@@ -82,6 +84,27 @@ describe("useFileDrop.onDrop (drag-and-drop flow between projects)", () => {
       setFolderIdDragging: mockSetFolderIdDragging,
       myCollectionId: "my-collection",
     };
+  });
+
+  it("refuses JSON import without calling the upload endpoint in platform mode", () => {
+    useAuthStore.setState({
+      platformWorkflowActions: ["read", "create", "update"],
+    });
+    const { result } = renderHook(() => useFileDrop("project-B"));
+    const event = {
+      preventDefault: jest.fn(),
+      dataTransfer: {
+        getData: () => "",
+        types: ["Files"],
+        files: [new File(["{}"], "flow.json", { type: "application/json" })],
+      },
+    } as unknown as React.DragEvent<HTMLDivElement>;
+    result.current.onDrop(event, "project-B");
+    expect(mockUploadFlowToFolder).not.toHaveBeenCalled();
+    expect(mockSaveFlow).not.toHaveBeenCalled();
+    expect(mockSetErrorData).toHaveBeenCalledWith(
+      expect.objectContaining({ list: [expect.stringContaining("尚未开放")] }),
+    );
   });
 
   it("should_call_saveFlow_with_new_folder_id_when_flow_is_dropped_into_empty_project", () => {

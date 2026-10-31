@@ -11,10 +11,13 @@ import { usePermissions } from "@/contexts/permissionsContext";
 import { useDeleteDeleteFlows } from "@/controllers/API/queries/flows/use-delete-delete-flows";
 import { useGetDownloadFlows } from "@/controllers/API/queries/flows/use-get-download-flows";
 import { ENABLE_MCP } from "@/customization/feature-flags";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import DeleteConfirmationModal from "@/modals/deleteConfirmationModal";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import { useUtilityStore } from "@/stores/utilityStore";
+import { extractApiErrorMessages } from "@/utils/apiError";
 import { cn } from "@/utils/utils";
 
 import type { FlowTabType } from "../../types";
@@ -51,6 +54,11 @@ const HeaderComponent = ({
   selectedFlows,
 }: HeaderComponentProps) => {
   const { t } = useTranslation();
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
+  const isPlatform = platformActions != null;
+  const setErrorData = useAlertStore((state) => state.setErrorData);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const isMCPEnabled = ENABLE_MCP;
   const setSuccessData = useAlertStore((state) => state.setSuccessData);
@@ -77,12 +85,13 @@ const HeaderComponent = ({
   // If current flowType is not available based on feature flag, switch to flows
   useEffect(() => {
     if (
+      (isPlatform && flowType !== "flows") ||
       (flowType === "mcp" && !isMCPEnabled) ||
       (flowType === "components" && isMCPEnabled)
     ) {
       setFlowType("flows");
     }
-  }, [flowType, isMCPEnabled, setFlowType]);
+  }, [flowType, isMCPEnabled, setFlowType, isPlatform]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setDebouncedSearch(e.target.value);
@@ -96,19 +105,31 @@ const HeaderComponent = ({
   // Determine which tabs to show based on feature flags
   const tabTypes = [
     "flows",
-    ...(isMCPEnabled ? ["mcp"] : ["components"]),
-    ...(isDeploymentsEnabled ? ["deployments"] : []),
+    ...(!isPlatform ? (isMCPEnabled ? ["mcp"] : ["components"]) : []),
+    ...(!isPlatform && isDeploymentsEnabled ? ["deployments"] : []),
   ];
 
   const handleDownload = () => {
-    downloadFlows({ ids: selectedFlows });
-    setSuccessData({ title: t("mainPage.flowsDownloadedSuccess") });
+    if (!hasSelection || !canBulkDownload) return;
+    downloadFlows(
+      { ids: selectedFlows },
+      {
+        onSuccess: () =>
+          setSuccessData({ title: t("mainPage.flowsDownloadedSuccess") }),
+        onError: (error) =>
+          setErrorData({
+            title: t("errors.download"),
+            list: extractApiErrorMessages(error),
+          }),
+      },
+    );
   };
 
   const flows = useFlowsManagerStore((state) => state.flows);
   const setFlows = useFlowsManagerStore((state) => state.setFlows);
 
   const handleDelete = () => {
+    if (!hasSelection || !canBulkDelete) return;
     deleteFlows(
       { flow_ids: selectedFlows },
       {
@@ -129,7 +150,8 @@ const HeaderComponent = ({
   // keeps the single-item and bulk entry points consistent. Fail-open (no
   // provider / OSS pass-through) leaves both buttons enabled.
   const { can } = usePermissions();
-  const canBulkDownload = selectedFlows.every((id) => can(id, "read"));
+  const canBulkDownload =
+    !isPlatform && selectedFlows.every((id) => can(id, "read"));
   const canBulkDelete = selectedFlows.every((id) => can(id, "delete"));
 
   return (
@@ -151,6 +173,19 @@ const HeaderComponent = ({
         </div>
         {folderName}
       </div>
+      {isPlatform && (
+        <p className="pb-3 text-xs text-muted-foreground" role="status">
+          当前能力：
+          {[
+            platformActions?.includes("read") && "查看",
+            platformActions?.includes("create") && "新建",
+            platformActions?.includes("update") && "保存",
+          ]
+            .filter(Boolean)
+            .join("、") || "权限暂不可用"}
+          。{PLATFORM_UNAVAILABLE_REASON}
+        </p>
+      )}
       {!isEmptyFolder && (
         <>
           <div className={cn("flex pb-4")}>
@@ -267,6 +302,7 @@ const HeaderComponent = ({
                     onClick={handleDownload}
                     loading={isDownloading}
                     disabled={!canBulkDownload}
+                    title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
                     tabIndex={hasSelection && canBulkDownload ? 0 : -1}
                     aria-label={t("flows.downloadSelected")}
                   >
@@ -289,6 +325,9 @@ const HeaderComponent = ({
                       data-testid="delete-bulk-btn"
                       loading={isDeleting}
                       disabled={!canBulkDelete}
+                      title={
+                        isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined
+                      }
                       tabIndex={hasSelection && canBulkDelete ? 0 : -1}
                     >
                       <ForwardedIconComponent name="Trash2" />
@@ -302,9 +341,10 @@ const HeaderComponent = ({
                       variant="default"
                       size="iconMd"
                       className="z-50 px-2.5 !text-mmd"
-                      onClick={() =>
-                        onNewFlow ? onNewFlow() : setNewProjectModal(true)
-                      }
+                      onClick={() => {
+                        if (!can(null, "create")) return;
+                        onNewFlow ? onNewFlow() : setNewProjectModal(true);
+                      }}
                       id="new-project-btn"
                       disabled={!can(null, "create")}
                       data-testid="new-project-btn"

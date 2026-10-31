@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
 import useAddFlow from "@/hooks/flows/use-add-flow";
+import useAuthStore from "@/stores/authStore";
 import useFlowBuilderWelcomeStore from "@/stores/flowBuilderWelcomeStore";
 
 /**
@@ -29,7 +30,8 @@ export function useStartNewFlow() {
     // Tag the welcome with this flow's id so the mount can auto-close it if
     // the user navigates to a DIFFERENT flow (e.g. picks a template in the
     // TemplatesModal which spins up its own new flow).
-    openWelcome(id);
+    if (useAuthStore.getState().platformWorkflowActions == null)
+      openWelcome(id);
     navigate(`/flow/${id}${folderId ? `/folder/${folderId}` : ""}`);
   }, [addFlow, navigate, folderId, openWelcome]);
 }

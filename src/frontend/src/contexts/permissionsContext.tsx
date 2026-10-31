@@ -65,6 +65,8 @@ export function usePermissions(): PermissionsContextValue {
           >
         )[action];
         if (!required || !actions.includes(required)) return false;
+        // 查询失败时 React Query 可能仍保留旧授权数据, 平台编辑不能沿用缓存放行。
+        if (context !== DEFAULT_CONTEXT_VALUE && context.isError) return false;
         if (
           resourceId &&
           context !== DEFAULT_CONTEXT_VALUE &&

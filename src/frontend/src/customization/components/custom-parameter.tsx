@@ -4,6 +4,7 @@ import type { handleOnNewValueType } from "@/CustomNodes/hooks/use-handle-new-va
 import { ParameterRenderComponent } from "@/components/core/parameterRenderComponent";
 import type { NodeInfoType } from "@/components/core/parameterRenderComponent/types";
 import { useIsFlowReadOnly } from "@/contexts/permissionsContext";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import type { APIClassType, InputFieldType } from "@/types/api";
 import type { targetHandleType } from "@/types/flow";
@@ -51,6 +52,9 @@ export function CustomParameterComponent({
   const edges = useFlowStore((state) => state.edges);
   const currentFlowId = useFlowStore((state) => state.currentFlow?.id);
   const isReadOnly = useIsFlowReadOnly(currentFlowId);
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
 
   const disabled =
     edges.some(
@@ -59,19 +63,43 @@ export function CustomParameterComponent({
         scapedJSONStringfy(proxy ? { ...inputId, proxy } : inputId),
     ) || isToolMode;
 
+  // 文件/凭据选择器本身含自动请求；不能只禁用外层，否则仍挂载未授权的管理接口。
+  if (
+    isPlatform &&
+    [
+      "file",
+      "mcp",
+      "model",
+      "knowledge_backend",
+      "connect",
+      "connection_ref",
+    ].includes(templateData.type ?? "")
+  ) {
+    return (
+      <p className="text-sm text-muted-foreground" role="status">
+        文件、模型、连接与 MCP 配置尚未开放；已有引用保留在流程中。
+      </p>
+    );
+  }
+
   return (
-    <div
+    <fieldset
       data-testid="parameter-permission-gate"
       className={cn(
-        "w-full min-w-0",
+        "m-0 w-full min-w-0 border-0 p-0",
         isReadOnly && "pointer-events-none opacity-60",
       )}
+      // 原生禁用后代控件, 不传入旧 disabled 属性, 避免连线字段清空逻辑抹掉草稿。
+      disabled={isReadOnly}
       inert={isReadOnly}
       aria-disabled={isReadOnly}
       title={isReadOnly ? t("version.readOnly") : undefined}
     >
       <ParameterRenderComponent
-        handleOnNewValue={handleOnNewValue}
+        handleOnNewValue={(changes, options) => {
+          // 已打开的 Portal 弹窗位于 fieldset 外, 收权后回调也不能更改画布。
+          if (!isReadOnly) handleOnNewValue(changes, options);
+        }}
         name={name}
         nodeId={nodeId}
         templateData={templateData}
@@ -79,7 +107,9 @@ export function CustomParameterComponent({
         editNode={editNode}
         showParameter={showParameter}
         inspectionPanel={inspectionPanel}
-        handleNodeClass={handleNodeClass}
+        handleNodeClass={(value, code, type) => {
+          if (!isReadOnly) handleNodeClass(value, code, type);
+        }}
         nodeClass={nodeClass}
         disabled={disabled}
         placeholder={placeholder}
@@ -87,7 +117,7 @@ export function CustomParameterComponent({
         nodeInformationMetadata={nodeInformationMetadata}
         ariaLabelledBy={ariaLabelledBy}
       />
-    </div>
+    </fieldset>
   );
 }
 

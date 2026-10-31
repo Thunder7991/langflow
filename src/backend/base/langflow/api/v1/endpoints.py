@@ -2025,6 +2025,9 @@ async def custom_component_update(
         HTTPException: If an error occurs during component building or updating.
         SerializationError: If serialization of the updated component node fails.
     """
+    from langflow.services.auth.platform_workflows import prepare_node_refresh
+
+    await prepare_node_refresh(request, code_request, flow_id, user)
     # Updating a custom component instantiates (and partially executes) posted
     # code, a create/write-class action. Enforce the external access ceiling
     # directly so a "viewer" external identity is denied; editor/admin (and all

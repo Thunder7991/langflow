@@ -1,0 +1,30 @@
+/** 仅约束平台嵌入模式的界面；最终授权和可信源码检查仍由服务端执行。 */
+export const PLATFORM_UNAVAILABLE_REASON =
+  "当前平台仅开放本人普通流程的查看、新建和保存；文件、导入导出、复制流程、删除流程、调试、发布及 MCP 管理尚未开放。";
+export const PLATFORM_READ_ONLY_REASON =
+  "当前没有修改权限，未保存内容仍保留在当前页面。";
+
+// 对应 B2 prepare_node_refresh 已审查的六类内置节点；这里不是服务端安全白名单。
+const EDITABLE_NODE_TYPES = new Set([
+  "ChatInput",
+  "ChatOutput",
+  "TextInput",
+  "TextOutput",
+  "Prompt Template",
+  "ParserComponent",
+]);
+export function isPlatformNodeAvailable(type: string): boolean {
+  return EDITABLE_NODE_TYPES.has(type);
+}
+
+export function isPlatformWorkflowRouteAvailable(pathname: string): boolean {
+  if (/^\/(assets|components|mcp)(\/|$)/.test(pathname)) return false;
+  if (/^\/settings(\/|$)/.test(pathname)) {
+    return (
+      /^\/settings\/?$/.test(pathname) ||
+      /^\/settings\/general(\/|$)/.test(pathname) ||
+      /^\/settings\/shortcuts\/?$/.test(pathname)
+    );
+  }
+  return true;
+}

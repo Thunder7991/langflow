@@ -7,7 +7,9 @@ import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { useIsFlowReadOnly } from "@/contexts/permissionsContext";
 import { ENABLE_NEW_SIDEBAR } from "@/customization/feature-flags";
 import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import AddMcpServerModal from "@/modals/addMcpServerModal";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { cn } from "@/utils/utils";
@@ -28,6 +30,9 @@ const SidebarMenuButtons = ({
   // can never disagree about which flow is being evaluated.
   const currentFlowId = useFlowStore((state) => state.currentFlow?.id);
   const isFlowReadOnly = useIsFlowReadOnly(currentFlowId);
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
 
   // One flag for every reason the add is refused: the component types are
   // still loading, there is nothing to add yet, the permission answer is in
@@ -39,6 +44,16 @@ const SidebarMenuButtons = ({
   const handleAddMcpServerClick = () => {
     setAddMcpOpen(true);
   };
+
+  if (isPlatform)
+    return (
+      <p
+        className="px-3 py-2 text-xs text-muted-foreground"
+        title={PLATFORM_UNAVAILABLE_REASON}
+      >
+        仅开放已审查的内置节点，MCP 与自定义代码暂未开放。
+      </p>
+    );
 
   // Hide custom component button when custom components are blocked
   if (

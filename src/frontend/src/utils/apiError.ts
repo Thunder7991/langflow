@@ -8,8 +8,14 @@ type ApiDetailEntry = { msg?: string } | string;
 type ApiDetailObject = { message?: unknown; [key: string]: unknown };
 
 type ApiErrorShape = {
+  platformWorkflow?: boolean;
   response?: {
-    data?: { detail?: ApiDetailEntry[] | string | ApiDetailObject };
+    status?: number;
+    headers?: Record<string, unknown>;
+    data?: {
+      code?: string;
+      detail?: ApiDetailEntry[] | string | ApiDetailObject;
+    };
   };
   message?: string;
 };
@@ -35,6 +41,38 @@ export function extractApiErrorMessages(error: unknown): string[] {
 
   const e = error as ApiErrorShape;
   const detail = e.response?.data?.detail;
+  const code = e.response?.data?.code;
+  const platformError =
+    e.platformWorkflow ||
+    code === "PLATFORM_SSO_REQUIRED" ||
+    code === "PLATFORM_SSO_ERROR" ||
+    e.response?.headers?.["x-workflow-actions"] !== undefined;
+  if (
+    e.response?.status === 409 &&
+    typeof detail === "object" &&
+    !Array.isArray(detail) &&
+    detail?.code === "flow_version_conflict"
+  ) {
+    return ["流程版本发生冲突，当前草稿已保留，请比较后再加载最新版本。"];
+  }
+  if (platformError) {
+    if (!e.response)
+      return [
+        "工作流网络连接异常，操作结果尚未确认；当前未保存内容仍保留，请恢复连接后核对。",
+      ];
+    if (e.response?.status === 401)
+      return [
+        "平台登录已失效，请返回平台重新登录；当前未保存内容仍保留在页面中。",
+      ];
+    if (e.response?.status === 403)
+      return [
+        "当前没有此操作的权限，或此功能尚未向平台开放；当前未保存内容仍保留。",
+      ];
+    if ((e.response?.status ?? 0) >= 500)
+      return [
+        "工作流或平台认证服务暂时不可用，请稍后重试；当前未保存内容仍保留。",
+      ];
+  }
 
   if (Array.isArray(detail)) {
     const msgs = detail

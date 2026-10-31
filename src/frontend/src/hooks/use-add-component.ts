@@ -3,6 +3,12 @@ import { useCallback } from "react";
 import { NODE_WIDTH } from "@/constants/constants";
 import { useIsFlowReadOnly } from "@/contexts/permissionsContext";
 import { track } from "@/customization/utils/analytics";
+import {
+  isPlatformNodeAvailable,
+  PLATFORM_UNAVAILABLE_REASON,
+} from "@/customization/utils/platform-workflow-ui";
+import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import type { APIClassType } from "@/types/api";
 import type { AllNodeType } from "@/types/flow";
@@ -24,6 +30,16 @@ export function useAddComponent() {
       position?: { x: number; y: number },
     ) => {
       if (isReadOnly) return;
+      if (
+        useAuthStore.getState().platformWorkflowActions != null &&
+        !isPlatformNodeAvailable(type)
+      ) {
+        useAlertStore.getState().setErrorData({
+          title: "此节点尚未开放",
+          list: [PLATFORM_UNAVAILABLE_REASON],
+        });
+        return;
+      }
       track("Component Added", { componentType: component.display_name });
 
       const {

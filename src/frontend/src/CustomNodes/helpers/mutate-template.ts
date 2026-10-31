@@ -7,6 +7,7 @@ import type {
   APITemplateType,
   ResponseErrorDetailAPI,
 } from "@/types/api";
+import { extractApiErrorMessages } from "@/utils/apiError";
 import i18n from "../../i18n";
 import { updateHiddenOutputs } from "./update-hidden-outputs";
 
@@ -202,10 +203,7 @@ export const mutateTemplate = async (
             );
             setErrorData({
               title: i18n.t("input.titleErrorUpdatingComponent"),
-              list: [
-                error.response?.data?.detail ||
-                  i18n.t("input.errorUpdatingComponent"),
-              ],
+              list: extractApiErrorMessages(error),
             });
           }
         },

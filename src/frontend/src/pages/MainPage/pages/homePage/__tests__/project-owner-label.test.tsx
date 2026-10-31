@@ -27,6 +27,8 @@ const mockFlows = [];
 const mockNavigate = jest.fn();
 let mockFolderId: string | undefined = "foreign-id";
 const mockFolderQuery = {
+  isError: false,
+  error: null as unknown,
   data: {
     folder: mockFolders[0],
     flows: { items: [], page: 1, size: 12, total: 1, pages: 1 },
@@ -35,6 +37,7 @@ const mockFolderQuery = {
 };
 
 jest.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: jest.fn() },
   useTranslation: () => ({
     t: (key: string, options?: Record<string, string>) =>
       key === "project.ownedBy" ? `${options?.name} — ${options?.owner}` : key,
@@ -101,6 +104,22 @@ jest.mock("@/pages/MainPage/pages/emptyFolder", () => () => null);
 describe("HomePage project names", () => {
   beforeEach(() => {
     mockFolderId = "foreign-id";
+    mockFolderQuery.isError = false;
+    mockFolderQuery.error = null;
+  });
+
+  it("shows service failure instead of presenting a failed query as an empty project", () => {
+    mockFolderQuery.isError = true;
+    mockFolderQuery.error = {
+      response: {
+        status: 503,
+        headers: { "x-workflow-actions": "" },
+        data: { code: "PLATFORM_SSO_ERROR" },
+      },
+    };
+    render(<HomePage type="flows" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/服务.*不可用/);
+    expect(screen.queryByTestId("header-project-name")).not.toBeInTheDocument();
   });
 
   it("qualifies the visible header while preserving the canonical MCP name", async () => {

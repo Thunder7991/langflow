@@ -47,3 +47,25 @@ it.each([403, 503])(
     unmount();
   },
 );
+
+it("does not refresh or logout when a proxy rejects a platform request without capability headers", async () => {
+  useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+  const installed = jest.spyOn(api.interceptors.response, "use");
+  const { unmount } = render(<ApiInterceptor />);
+  const rejectResponse = installed.mock.calls[0][1]!;
+  const config = { url: "/api/v1/flows/flow-id", headers: new AxiosHeaders() };
+  const error = new AxiosError("proxy denied", undefined, config, undefined, {
+    data: {},
+    status: 403,
+    statusText: "Forbidden",
+    config,
+    headers: {},
+  });
+  await act(async () => {
+    await expect(rejectResponse(error)).rejects.toBe(error);
+  });
+  expect(mockRefresh).not.toHaveBeenCalled();
+  expect(mockLogout).not.toHaveBeenCalled();
+  expect(useAuthStore.getState().platformWorkflowActions).toEqual([]);
+  unmount();
+});

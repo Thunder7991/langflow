@@ -22,15 +22,16 @@ def isolated_auth_configuration(monkeypatch):
 
 
 @pytest.fixture
-async def editor(client, active_user, monkeypatch):
+async def editor(client, active_user, monkeypatch, request):
+    browser_settings = getattr(request, "param", {})
     settings = platform_sso.PlatformSsoSettings(
         enabled=True,
         platform_url="http://localhost:3000",
         client_id="flow-a",
         client_secret="test-editing-service-secret-with-32-characters",  # noqa: S106
         tenant_id="tenant-a",
-        public_url=ORIGIN,
-        host_origin="http://localhost:5999",
+        public_url=browser_settings.get("public_url", ORIGIN),
+        host_origin=browser_settings.get("host_origin", "http://localhost:5999"),
         secure=False,
     )
     live = {"actions": ["read", "create", "update"], "active": True}
@@ -69,7 +70,7 @@ async def editor(client, active_user, monkeypatch):
         return await middleware(scope, receive, send)
 
     client._transport.app = wrapped
-    client.headers["Origin"] = ORIGIN
+    client.headers["Origin"] = settings.public_url
     client.cookies.set(
         "platform_sso",
         platform_sso.encode_cookie(
@@ -339,4 +340,214 @@ async def test_graph_boundaries_reject_before_persisting(editor, template):
             f"/api/v1/flows/{flow['id']}", json={"data": graph}, headers={"If-Match": flow["version_token"]}
         )
     ).status_code in {403, 503}
+    assert (await client.get(f"/api/v1/flows/{flow['id']}")).json()["data"] == GRAPH
+
+
+@pytest.mark.parametrize(
+    ("actions", "create_status", "update_status", "permissions"),
+    [
+        (["read"], 403, 403, ["read"]),
+        (["read", "create"], 201, 403, ["read", "create"]),
+        (["read", "update"], 403, 200, ["read", "write"]),
+        (["read", "create", "update"], 201, 200, ["read", "write", "create"]),
+    ],
+)
+async def test_independent_actions_match_api_and_resource_permissions(
+    editor, actions, create_status, update_status, permissions
+):
+    client, _, live = editor
+    flow = await create(client)
+    live["actions"] = actions
+    granted = await client.post(
+        "/api/v1/authz/me/permissions", json={"resource_type": "flow", "resource_ids": [flow["id"]]}
+    )
+    assert granted.json()["permissions"][flow["id"]] == permissions
+    assert granted.headers["x-workflow-actions"] == ",".join(actions)
+    created = await client.post("/api/v1/flows/", json={"name": "action-matrix", "data": GRAPH})
+    assert created.status_code == create_status, created.text
+    project = await client.post("/api/v1/projects/", json={"name": f"matrix-{uuid4().hex}"})
+    assert project.status_code == create_status, project.text
+    edited_graph = {**GRAPH, "viewport": {"x": 42, "y": 17, "zoom": 0.7}}
+    saved = await client.patch(
+        f"/api/v1/flows/{flow['id']}",
+        json={"data": edited_graph},
+        headers={"If-Match": flow["version_token"]},
+    )
+    assert saved.status_code == update_status, saved.text
+    persisted = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
+    assert persisted["data"] == (edited_graph if update_status == 200 else GRAPH)
+    if update_status == 403:
+        assert persisted["version_token"] == flow["version_token"]
+
+
+async def test_old_cookie_and_forged_capabilities_cannot_write_after_revocation(editor):
+    client, _, live = editor
+    flow = await create(client)
+    old_cookie = client.cookies.get("platform_sso")
+    live["actions"] = ["read"]
+    refused = await client.patch(
+        f"/api/v1/flows/{flow['id']}",
+        json={"name": "must-not-land", "data": {**GRAPH, "viewport": {"x": 999}}},
+        headers={"If-Match": flow["version_token"], "X-Workflow-Actions": "read,create,update"},
+    )
+    assert refused.status_code == 403
+    assert refused.headers["x-workflow-actions"] == "read"
+    assert client.cookies.get("platform_sso") == old_cookie
+    persisted = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
+    assert persisted["name"] == flow["name"]
+    assert persisted["data"] == GRAPH
+    assert persisted["version_token"] == flow["version_token"]
+    # 恢复动作后沿用同一会话与版本即可保存, 证明没有把拒绝误判为登录过期。
+    live["actions"] = ["read", "update"]
+    restored = await client.patch(
+        f"/api/v1/flows/{flow['id']}", json={"name": "restored"}, headers={"If-Match": flow["version_token"]}
+    )
+    assert restored.status_code == 200
+
+
+async def builtin(client, name):
+    import copy
+
+    catalog = (await client.get("/api/v1/all")).json()
+    return copy.deepcopy(next(group[name] for group in catalog.values() if isinstance(group, dict) and name in group))
+
+
+def refresh_payload(node, field, value):
+    return {
+        "code": node["template"]["code"]["value"],
+        "template": node["template"],
+        "frontend_node": {"metadata": node.get("metadata")},
+        "field": field,
+        "field_value": value,
+        "tool_mode": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "field", "value"),
+    [
+        ("ParserComponent", "mode", "Stringify"),
+        ("TextInput", "use_global_variable", False),
+        ("Prompt Template", "use_double_brackets", True),
+        ("ChatInput", "input_value", "B2 chat"),
+        ("ChatOutput", "sender_name", "B2 output"),
+        ("TextOutput", "input_value", "B2 text"),
+    ],
+)
+async def test_builtin_mount_initialize_edit_save_and_reload(editor, name, field, value):
+    client, _, _ = editor
+    flow = await create(client)
+    node = await builtin(client, name)
+    path = f"/api/v1/custom_component/update?flow_id={flow['id']}"
+    initialized = await client.post(path, json=refresh_payload(node, field, node["template"][field]["value"]))
+    assert initialized.status_code == 200, initialized.text[:300]
+    edited = await client.post(path, json=refresh_payload(initialized.json(), field, value))
+    assert edited.status_code == 200, edited.text[:300]
+    updated = edited.json()
+    if field == "mode":
+        assert updated["template"]["pattern"]["show"] is False
+    # The client owns the changed value; the endpoint recomputes its dependent metadata.
+    updated["template"][field]["value"] = value
+    graph = {**GRAPH, "nodes": [{"id": "node-b2", "data": {"type": name, "node": updated}}]}
+    saved = await client.patch(
+        f"/api/v1/flows/{flow['id']}", json={"data": graph}, headers={"If-Match": flow["version_token"]}
+    )
+    assert saved.status_code == 200, saved.text[:300]
+    restored = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
+    restored_node = restored["data"]["nodes"][0]["data"]["node"]
+    assert restored_node["template"][field]["value"] == value
+    assert (await client.post(path, json=refresh_payload(restored_node, field, value))).status_code == 200
+
+
+async def test_node_initialization_checks_live_actions_and_ownership(editor, monkeypatch):
+    from langflow.services.deps import get_authorization_service
+
+    client, _, live = editor
+    flow = await create(client)
+    payload = refresh_payload(await builtin(client, "ParserComponent"), "mode", "Parser")
+    path = f"/api/v1/custom_component/update?flow_id={flow['id']}"
+    for actions in (["read"], ["read", "create"]):
+        live["actions"] = actions
+        assert (await client.post(path, json=payload)).status_code == 403
+    live["actions"] = ["read", "update"]
+    assert (await client.post(path, json=payload)).status_code == 200
+    assert (await client.post("/api/v1/custom_component/update", json=payload)).status_code == 422
+    async with session_scope() as session:
+        foreign = Flow(name="foreign-init", user_id=uuid4(), data=GRAPH)
+        session.add(foreign)
+        await session.flush()
+        foreign_id = str(foreign.id)
+
+    async def enabled():
+        return True
+
+    monkeypatch.setattr(get_authorization_service(), "supports_cross_user_fetch", enabled)
+    assert (await client.post(f"/api/v1/custom_component/update?flow_id={foreign_id}", json=payload)).status_code == 404
+    live["active"] = False
+    assert (await client.post(path, json=payload)).status_code == 401
+
+
+async def test_node_initialization_respects_native_write_denial(editor, monkeypatch):
+    from fastapi import HTTPException
+    from langflow.services.authorization import guards
+
+    client, _, _ = editor
+    flow = await create(client)
+    payload = refresh_payload(await builtin(client, "ParserComponent"), "mode", "Parser")
+
+    async def deny_write(*_args, **_kwargs):
+        raise HTTPException(403, "write denied by native policy")
+
+    monkeypatch.setattr(guards, "ensure_flow_permission", deny_write)
+    denied = await client.post(f"/api/v1/custom_component/update?flow_id={flow['id']}", json=payload)
+    assert denied.status_code == 403
+
+
+async def test_builtin_with_unaudited_hooks_and_code_editor_remain_blocked(editor, monkeypatch):
+    from langflow.api.v1 import endpoints
+
+    client, _, _ = editor
+    flow = await create(client)
+    payload = refresh_payload(await builtin(client, "Webhook"), "data", "")
+
+    def unexpected_build(*_args, **_kwargs):
+        pytest.fail("Unsupported initialization reached component execution")
+
+    monkeypatch.setattr(endpoints, "build_custom_component_template", unexpected_build)
+    assert (await client.post(f"/api/v1/custom_component/update?flow_id={flow['id']}", json=payload)).status_code == 403
+    assert (await client.post(f"/api/v1/custom_component?flow_id={flow['id']}", json=payload)).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "attack", ["code", "class", "nested-secret", "field-secret", "db", "scope", "tool", "private-field"]
+)
+async def test_node_initialization_denies_unsafe_payload_before_build(editor, monkeypatch, attack):
+    from langflow.api.v1 import endpoints
+
+    client, _, _ = editor
+    flow = await create(client)
+    payload = refresh_payload(await builtin(client, "ParserComponent"), "mode", "Parser")
+    if attack == "code":
+        payload["code"] = "raise RuntimeError('must never execute')"
+    elif attack == "class":
+        payload["frontend_node"] = {"metadata": {"component_class_name": "Component"}}
+    elif attack == "nested-secret":
+        payload["template"]["extra"] = {"value": {"token": "not-a-real-secret"}}
+    elif attack == "field-secret":
+        payload["field_value"] = {"api_key": "not-a-real-secret"}
+    elif attack == "db":
+        payload["template"]["mode"]["load_from_db"] = True
+    elif attack == "scope":
+        payload["template"]["_frontend_node_flow_id"] = {"value": str(uuid4())}
+    elif attack == "tool":
+        payload["tool_mode"] = True
+    else:
+        payload["field"] = "_user_id"
+
+    def unexpected_build(*_args, **_kwargs):
+        pytest.fail("Denied platform initialization reached component execution")
+
+    monkeypatch.setattr(endpoints, "build_custom_component_template", unexpected_build)
+    denied = await client.post(f"/api/v1/custom_component/update?flow_id={flow['id']}", json=payload)
+    assert denied.status_code == 403, denied.text[:300]
     assert (await client.get(f"/api/v1/flows/{flow['id']}")).json()["data"] == GRAPH

@@ -3,6 +3,7 @@ import { memo, useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { track } from "@/customization/utils/analytics";
 import ExportModal from "@/modals/exportModal";
+import useAuthStore from "@/stores/authStore";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import useFlowStore from "../../../stores/flowStore";
 import { useShortcutsStore } from "../../../stores/shortcuts";
@@ -11,16 +12,21 @@ import FlowToolbarOptions from "./components/flow-toolbar-options";
 
 const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   const preventDefault = true;
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const [openApiModal, setOpenApiModal] = useState<boolean>(false);
   const [openExportModal, setOpenExportModal] = useState<boolean>(false);
   const isPlaygroundOpen = usePlaygroundStore((state) => state.isOpen);
   const setPlaygroundOpen = usePlaygroundStore((state) => state.setIsOpen);
   const handleAPIWShortcut = (e: KeyboardEvent) => {
+    if (isPlatform) return;
     if (isThereModal() && !openApiModal) return;
     setOpenApiModal((oldOpen) => !oldOpen);
   };
 
   const handleChatWShortcut = (e: KeyboardEvent) => {
+    if (isPlatform) return;
     if (isThereModal() && !isPlaygroundOpen) return;
     if (useFlowStore.getState().hasIO) {
       setPlaygroundOpen(!isPlaygroundOpen);
@@ -28,6 +34,7 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   };
 
   const handleShareWShortcut = (e: KeyboardEvent) => {
+    if (isPlatform) return;
     if (isThereModal() && !openExportModal) return;
     setOpenExportModal((oldState) => !oldState);
   };
@@ -39,6 +46,15 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   useHotkeys(openPlayground, handleChatWShortcut, { preventDefault });
   useHotkeys(api, handleAPIWShortcut, { preventDefault });
   useHotkeys(flow, handleShareWShortcut, { preventDefault });
+
+  useEffect(() => {
+    // 撤权只收起未开放的运行/导出面板，不重置画布和未保存草稿。
+    if (isPlatform) {
+      setPlaygroundOpen(false);
+      setOpenApiModal(false);
+      setOpenExportModal(false);
+    }
+  }, [isPlatform, setPlaygroundOpen]);
 
   useEffect(() => {
     if (isPlaygroundOpen) {
@@ -60,7 +76,9 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
           />
         </div>
       </Panel>
-      <ExportModal open={openExportModal} setOpen={setOpenExportModal} />
+      {!isPlatform && (
+        <ExportModal open={openExportModal} setOpen={setOpenExportModal} />
+      )}
     </>
   );
 });

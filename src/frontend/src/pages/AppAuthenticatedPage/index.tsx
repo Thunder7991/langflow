@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { PlatformWorkflowGuard } from "@/components/authorization/platformWorkflowGuard";
 import { ChangesPausedNotice } from "@/components/common/changesPausedNotice";
 import { StorageUpgradeNotice } from "@/components/common/storageUpgradeNotice";
 import { ExtensionEventsListener } from "@/components/extensions/ExtensionEventsListener";
@@ -18,7 +19,9 @@ export function AppAuthenticatedPage() {
     <>
       {extensionsEnabled && <ExtensionEventsListener />}
       <StorageUpgradeNotice />
-      <Outlet />
+      <PlatformWorkflowGuard>
+        <Outlet />
+      </PlatformWorkflowGuard>
       {/* After the page, so it shows above the editor's sidebar, which sits at the same level. */}
       <ChangesPausedNotice />
     </>

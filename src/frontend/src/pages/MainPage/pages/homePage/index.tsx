@@ -15,8 +15,10 @@ import {
 } from "@/customization/feature-flags";
 import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
 import { useDocumentTitle } from "@/hooks/use-document-title";
+import useAuthStore from "@/stores/authStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import { useFolderStore } from "@/stores/foldersStore";
+import { extractApiErrorMessages } from "@/utils/apiError";
 import { getProjectDisplayName } from "@/utils/project-display-name";
 import HeaderComponent from "../../components/header";
 import ListComponent from "../../components/list";
@@ -39,6 +41,9 @@ const PAGE_TITLE_KEYS: Record<FlowTabType, string> = {
 
 const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
   const { t } = useTranslation();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const [view, setView] = useState<"grid" | "list">(() => {
     const savedView = localStorage.getItem("view");
     return savedView === "grid" || savedView === "list" ? savedView : "list";
@@ -52,11 +57,13 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
   const [isEmptyFolder, setIsEmptyFolder] = useState<boolean | null>(null);
   const navigate = useCustomNavigate();
 
-  const [flowType, setFlowType] = useState<FlowTabType>(
+  const [flowTypeState, setFlowType] = useState<FlowTabType>(
     (location.state as Record<string, unknown>)?.flowType === "deployments"
       ? "deployments"
       : type,
   );
+  // 旧路由 state 或原生页缓存不能重新挂载平台未开放的 MCP/部署页面。
+  const flowType = isPlatform ? "flows" : flowTypeState;
   useDocumentTitle(t(PAGE_TITLE_KEYS[flowType]));
   const myCollectionId = useFolderStore((state) => state.myCollectionId);
   const folders = useFolderStore((state) => state.folders);
@@ -73,6 +80,10 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
   // "open the templates modal" behavior. The templates modal is still
   // reachable from inside the welcome via "Browse more templates".
   const startNewFlow = useStartNewFlow();
+  // 新建 hook 已负责提示错误；这里只消费拒绝，避免事件处理器产生未处理的 Promise。
+  const handleNewFlow = () => {
+    void startNewFlow().catch(() => {});
+  };
 
   useEffect(() => {
     // Only check if we have a folderId and folders have loaded
@@ -90,7 +101,13 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
   // route omits the id), so permission checks must scope to the same project.
   const permissionsFolderId = folderId ?? myCollectionId;
 
-  const { data: folderData, isLoading } = useGetFolderQuery({
+  const {
+    data: folderData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetFolderQuery({
     id: folderId ?? myCollectionId,
     page: pageIndex,
     size: pageSize,
@@ -296,6 +313,22 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
     };
   }, [folderId]);
 
+  if (isError)
+    return (
+      <div role="alert" className="flex flex-col gap-4 p-6">
+        <p>{extractApiErrorMessages(error).join("\n")}</p>
+        <button
+          type="button"
+          className="self-start underline"
+          onClick={() => {
+            void refetch();
+          }}
+        >
+          重试加载列表
+        </button>
+      </div>
+    );
+
   return (
     <CardsWrapComponent
       onFileDrop={flowType === "mcp" ? undefined : handleFileDrop}
@@ -329,7 +362,7 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
                   view={view}
                   setView={setView}
                   setNewProjectModal={setNewProjectModal}
-                  onNewFlow={startNewFlow}
+                  onNewFlow={handleNewFlow}
                   setSearch={onSearch}
                   isEmptyFolder={isEmptyFolder === true}
                   selectedFlows={selectedFlows}
@@ -337,7 +370,7 @@ const HomePage = ({ type }: { type: "flows" | "components" | "mcp" }) => {
                 {isEmptyFolder === true ? (
                   <EmptyFolder
                     setOpenModal={setNewProjectModal}
-                    onNewFlow={startNewFlow}
+                    onNewFlow={handleNewFlow}
                   />
                 ) : (
                   <div className="flex h-full flex-col">

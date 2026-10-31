@@ -10,6 +10,7 @@ import useFlowConflictStore, {
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import type { AllNodeType, EdgeType, FlowType } from "@/types/flow";
+import { extractApiErrorMessages } from "@/utils/apiError";
 import { customStringify } from "@/utils/reactflowUtils";
 import {
   attachTheirFlow,
@@ -230,7 +231,7 @@ const useSaveFlow = () => {
               reject(e);
               return;
             }
-            reportSaveError(detail || e.message || "Unknown error");
+            reportSaveError(extractApiErrorMessages(e).join("\n"));
             setSaveLoading(false);
             reject(e);
           };

@@ -18,6 +18,9 @@ export interface SettingsSidebarItem {
 export function useSettingsSidebarItems(): SettingsSidebarItem[] {
   const { t } = useTranslation();
   const autoLogin = useAuthStore((state) => state.autoLogin);
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
   const isSuperuser = Boolean(
     useAuthStore((state) => state.userData)?.is_superuser,
   );
@@ -27,7 +30,12 @@ export function useSettingsSidebarItems(): SettingsSidebarItem[] {
   );
   const items: SettingsSidebarItem[] = [];
 
-  if (ENABLE_PROFILE_ICONS || hasStore || !autoLogin) {
+  if (
+    platformActions != null ||
+    ENABLE_PROFILE_ICONS ||
+    hasStore ||
+    !autoLogin
+  ) {
     items.push({
       title: t("settings.nav.general"),
       href: "/settings/general",
@@ -140,5 +148,11 @@ export function useSettingsSidebarItems(): SettingsSidebarItem[] {
     items.splice(2, 0, ...CustomStoreSidebar(true));
   }
 
-  return items;
+  return platformActions == null
+    ? items
+    : items.filter(
+        (item) =>
+          item.href === "/settings/general" ||
+          item.href === "/settings/shortcuts",
+      );
 }

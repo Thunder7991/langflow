@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/contexts/permissionsContext";
 import { useFolderStore } from "@/stores/foldersStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 
@@ -14,6 +15,8 @@ type EmptyFolderProps = {
 
 export const EmptyFolder = ({ setOpenModal, onNewFlow }: EmptyFolderProps) => {
   const { t } = useTranslation();
+  const { can } = usePermissions();
+  const canCreate = can(null, "create");
   const folders = useFolderStore((state) => state.folders);
   const hideNewFlowButton = useUtilityStore((state) => state.hideNewFlowButton);
 
@@ -34,7 +37,11 @@ export const EmptyFolder = ({ setOpenModal, onNewFlow }: EmptyFolderProps) => {
         {!hideNewFlowButton && (
           <Button
             variant="default"
-            onClick={() => (onNewFlow ? onNewFlow() : setOpenModal(true))}
+            onClick={() => {
+              if (canCreate) onNewFlow ? onNewFlow() : setOpenModal(true);
+            }}
+            disabled={!canCreate}
+            title={!canCreate ? "当前没有新建流程的权限" : undefined}
             id="new-project-btn"
             data-testid="new_project_btn_empty_page"
           >

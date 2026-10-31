@@ -104,10 +104,30 @@ function ApiInterceptor() {
         return response;
       },
       async (error: AxiosError) => {
+        const isPlatformRequest =
+          !isExternalURL(error.config?.url ?? "") &&
+          useAuthStore.getState().platformWorkflowActions != null;
         if (!isExternalURL(error.config?.url ?? ""))
           syncPlatformWorkflowActions(
             error.response?.headers["x-workflow-actions"],
           );
+        if (isPlatformRequest) {
+          // 反代/网络错误可能不带平台头；仍不能回退原生 refresh 或清空用户草稿。
+          Object.assign(error, { platformWorkflow: true });
+          const status = error.response?.status;
+          if (
+            error.code !== "ERR_CANCELED" &&
+            (status === 401 ||
+              status === 403 ||
+              (status ?? 0) >= 500 ||
+              !error.response) &&
+            error.response?.headers["x-workflow-actions"] === undefined
+          ) {
+            useAuthStore.getState().setPlatformWorkflowActions([]);
+          }
+          handlePlatformSsoError(error.response?.data);
+          return Promise.reject(error);
+        }
         if (handlePlatformSsoError(error.response?.data))
           return Promise.reject(error);
         // 平台已在线判定的业务403不能进入原生refresh重试，否则拒绝会被当成登录过期。

@@ -14,6 +14,7 @@ const mockCurrentFlow = {
   access_type: "PRIVATE",
 };
 const mockWriteText = jest.fn();
+let mockPlatformActions: string[] | null = null;
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -139,7 +140,8 @@ jest.mock("@/stores/alertStore", () => ({
 
 jest.mock("@/stores/authStore", () => ({
   __esModule: true,
-  default: (selector) => selector({ autoLogin: true }),
+  default: (selector) =>
+    selector({ autoLogin: true, platformWorkflowActions: mockPlatformActions }),
 }));
 
 jest.mock("@/stores/flowStore", () => ({
@@ -170,10 +172,20 @@ Object.defineProperty(navigator, "clipboard", {
 describe("PublishDropdown", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPlatformActions = null;
     mockCurrentFlow.access_type = "PRIVATE";
     mockAutoSaveFlush.mockResolvedValue(undefined);
     mockMutateAsync.mockResolvedValue(undefined);
     mockWriteText.mockResolvedValue(undefined);
+  });
+
+  it("disables sharing and never mounts API, export or publish controls in platform mode", () => {
+    mockPlatformActions = ["read", "create", "update"];
+    render(<PublishDropdown openApiModal={true} setOpenApiModal={() => {}} />);
+    expect(screen.getByTestId("publish-button")).toBeDisabled();
+    expect(screen.queryByTestId("publish-switch")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("api-access-item")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-server-item")).not.toBeInTheDocument();
   });
 
   it("shows the full shareable link with a single slash when sharing is on", () => {

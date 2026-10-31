@@ -20,6 +20,7 @@ import {
   ENABLE_TRIGGERS,
 } from "@/customization/feature-flags";
 import { useAddComponent } from "@/hooks/use-add-component";
+import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { setLocalStorage } from "@/utils/local-storage-util";
 import {
@@ -75,6 +76,9 @@ interface FlowSidebarComponentProps {
 
 export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
   const { t } = useTranslation();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const rawData = useTypesStore((state) => state.data);
   const catalogGovernanceEnabled = useUtilityStore(
     (state) => state.catalogGovernanceEnabled,
@@ -117,12 +121,20 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
   } = useSidebar();
   const addComponent = useAddComponent();
 
+  useEffect(() => {
+    if (
+      isPlatform &&
+      ["mcp", "agent", "memories", "traces"].includes(activeSection)
+    )
+      setActiveSection("components");
+  }, [isPlatform, activeSection, setActiveSection]);
+
   // Get MCP servers for search functionality (only when new sidebar is enabled)
   const {
     data: mcpServers,
     isLoading: mcpLoading,
     isSuccess: mcpSuccess,
-  } = useGetMCPServers({ enabled: ENABLE_NEW_SIDEBAR });
+  } = useGetMCPServers({ enabled: ENABLE_NEW_SIDEBAR && !isPlatform });
 
   // Get search state from context
   const context = useSearchContext();
@@ -510,7 +522,7 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
                             setShowConfig={setShowConfig}
                           />
                         )}
-                        {showMcp && (
+                        {!isPlatform && showMcp && (
                           <McpSidebarGroup
                             mcpComponents={
                               hasSearchInput

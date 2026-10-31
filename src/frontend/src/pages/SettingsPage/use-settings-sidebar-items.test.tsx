@@ -4,6 +4,7 @@ import { useSettingsSidebarItems } from "./use-settings-sidebar-items";
 
 let mockIsSuperuser = false;
 let mockMigrationEnabled = false;
+let mockPlatformActions: string[] | null = null;
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -36,12 +37,14 @@ jest.mock("@/stores/authStore", () => ({
   default: (
     selector: (state: {
       autoLogin: boolean;
+      platformWorkflowActions: string[] | null;
       userData: { is_superuser: boolean };
     }) => unknown,
   ) =>
     selector({
       autoLogin: false,
       userData: { is_superuser: mockIsSuperuser },
+      platformWorkflowActions: mockPlatformActions,
     }),
 }));
 
@@ -65,6 +68,18 @@ describe("useSettingsSidebarItems", () => {
   beforeEach(() => {
     mockIsSuperuser = false;
     mockMigrationEnabled = false;
+    mockPlatformActions = null;
+  });
+
+  it("keeps local preferences but removes backend management in platform mode", () => {
+    mockPlatformActions = ["read", "create", "update"];
+    mockIsSuperuser = true;
+    mockMigrationEnabled = true;
+    const { result } = renderHook(() => useSettingsSidebarItems());
+    expect(result.current.map((item) => item.href)).toEqual([
+      "/settings/general",
+      "/settings/shortcuts",
+    ]);
   });
 
   it.each([

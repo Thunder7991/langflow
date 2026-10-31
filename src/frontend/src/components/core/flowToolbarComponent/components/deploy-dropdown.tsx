@@ -17,6 +17,7 @@ import CustomFlowShareAction from "@/customization/components/custom-flow-share-
 import { CustomLink } from "@/customization/components/custom-link";
 import { ENABLE_PUBLISH, ENABLE_WIDGET } from "@/customization/feature-flags";
 import { customMcpOpen } from "@/customization/utils/custom-mcp-open";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import ApiModal from "@/modals/apiModal";
 import EmbedModal from "@/modals/EmbedModal/embed-modal";
 import ExportModal from "@/modals/exportModal";
@@ -34,7 +35,23 @@ type PublishDropdownProps = {
   children?: ReactNode;
 };
 
-export default function PublishDropdown({
+export default function PublishDropdown({ ...props }: PublishDropdownProps) {
+  const { t } = useTranslation();
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
+  if (platformActions != null)
+    return (
+      <span title={PLATFORM_UNAVAILABLE_REASON}>
+        <Button variant="ghost" size="md" disabled data-testid="publish-button">
+          {t("misc.share")}
+        </Button>
+      </span>
+    );
+  return <NativePublishDropdown {...props} />;
+}
+
+function NativePublishDropdown({
   openApiModal,
   setOpenApiModal,
   children,

@@ -8,6 +8,8 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
+import useAuthStore from "@/stores/authStore";
 import { useShortcutsStore } from "@/stores/shortcuts";
 import ToolbarSelectItem from "../toolbarSelectItem";
 
@@ -54,6 +56,9 @@ export function ToolbarMoreMenu({
   frozen,
 }: ToolbarMoreMenuProps): JSX.Element {
   const { t } = useTranslation();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const shortcuts = useShortcutsStore((state) => state.shortcuts);
   return (
     <Select
@@ -84,7 +89,12 @@ export function ToolbarMoreMenu({
       <SelectContentWithoutPortal
         className={"relative top-1 w-56 bg-background"}
       >
-        <SelectItem variant="plain" value={"save"}>
+        <SelectItem
+          variant="plain"
+          value={"save"}
+          disabled={isPlatform}
+          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+        >
           <ToolbarSelectItem
             shortcut={
               shortcuts.find((obj) => obj.name === "Save Component")?.shortcut!
@@ -133,7 +143,8 @@ export function ToolbarMoreMenu({
           <SelectItem
             variant="plain"
             value={"Share"}
-            disabled={!hasApiKey || !validApiKey}
+            disabled={isPlatform || !hasApiKey || !validApiKey}
+            title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           >
             <ToolbarSelectItem
               shortcut={
@@ -191,6 +202,8 @@ export function ToolbarMoreMenu({
           <SelectItem
             variant="plain"
             value="freezeAll"
+            disabled={isPlatform}
+            title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
             data-testid="freeze-all-button-modal"
           >
             <ToolbarSelectItem
@@ -206,7 +219,12 @@ export function ToolbarMoreMenu({
             />
           </SelectItem>
         )}
-        <SelectItem variant="plain" value="Download">
+        <SelectItem
+          variant="plain"
+          value="Download"
+          disabled={isPlatform}
+          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+        >
           <ToolbarSelectItem
             shortcut={
               shortcuts.find((obj) => obj.name === "Download")?.shortcut!

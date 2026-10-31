@@ -22,6 +22,7 @@ import { useWebhookEvents } from "@/hooks/use-webhook-events";
 import { SaveChangesModal } from "@/modals/saveChangesModal";
 import useAlertStore from "@/stores/alertStore";
 import useAssistantManagerStore from "@/stores/assistantManagerStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowBuilderWelcomeStore from "@/stores/flowBuilderWelcomeStore";
 import useFlowConflictStore from "@/stores/flowConflictStore";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
@@ -51,12 +52,18 @@ function FlowPageMainContent({
   setIsLoading: (isLoading: boolean) => void;
 }): JSX.Element {
   const { activeSection } = useSidebar();
-  const showTraces = ENABLE_NEW_SIDEBAR && activeSection === "traces";
-  const showMemories = ENABLE_NEW_SIDEBAR && activeSection === "memories";
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
+  const showTraces =
+    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "traces";
+  const showMemories =
+    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "memories";
   // The Agent tab is always available. It handles its own three states
   // (ineligible / eligible-not-serving / serving) inside AgentMainContent, so
   // there's nothing to fall back to the canvas for.
-  const showAgent = ENABLE_NEW_SIDEBAR && activeSection === "agent";
+  const showAgent =
+    !isPlatform && ENABLE_NEW_SIDEBAR && activeSection === "agent";
 
   if (showAgent) {
     return <AgentMainContent />;
@@ -85,6 +92,9 @@ function FlowPageMainContent({
 }
 
 export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const types = useTypesStore((state) => state.types);
   const { id } = useParams();
 
@@ -246,12 +256,14 @@ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
   const aiAssistantShortcut = useShortcutsStore((state) => state.aiAssistant);
   useHotkeys(
     aiAssistantShortcut,
-    () => setAssistantOpen(!assistantOpen),
+    () => {
+      if (!isPlatform) setAssistantOpen(!assistantOpen);
+    },
     {
       preventDefault: true,
       enableOnFormTags: false,
     },
-    [assistantOpen, aiAssistantShortcut],
+    [assistantOpen, aiAssistantShortcut, isPlatform],
   );
 
   // Close assistant with Escape
@@ -323,10 +335,12 @@ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
                     SidebarProvider so it can read sidebar open state via
                     ``useSidebar`` and shift its horizontal position when the
                     sidebar slides off-canvas. */}
-                  <AssistantPanel
-                    isOpen={assistantOpen}
-                    onClose={() => setAssistantOpen(false)}
-                  />
+                  {!isPlatform && (
+                    <AssistantPanel
+                      isOpen={assistantOpen}
+                      onClose={() => setAssistantOpen(false)}
+                    />
+                  )}
                   <FlowSearchProvider>
                     {/* FlowSidebarComponent - stays in place. Wrapped in a
                       ``display: none`` container while the welcome is open
@@ -363,10 +377,12 @@ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
                 </SidebarProvider>
               </div>
               <SimpleSidebar resizable={!isFullscreen} className="h-full">
-                <FlowPageSlidingContainerContent
-                  isFullscreen={isFullscreen}
-                  setIsFullscreen={setIsFullscreen}
-                />
+                {!isPlatform && (
+                  <FlowPageSlidingContainerContent
+                    isFullscreen={isFullscreen}
+                    setIsFullscreen={setIsFullscreen}
+                  />
+                )}
               </SimpleSidebar>
             </SimpleSidebarProvider>
           </div>

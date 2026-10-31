@@ -1,4 +1,5 @@
 import { useHotkeys } from "react-hotkeys-hook";
+import useAuthStore from "@/stores/authStore";
 import { useShortcutsStore } from "@/stores/shortcuts";
 import isWrappedWithClass from "../../PageComponent/utils/is-wrapped-with-class";
 
@@ -47,12 +48,14 @@ export default function useShortcuts({
   const toolMode = useShortcutsStore((state) => state.toolMode);
 
   function handleFreezeAll(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) return;
     if (isWrappedWithClass(e, "noflow") || !FreezeAllVertices) return;
     e.preventDefault();
     FreezeAllVertices();
   }
 
   function handleDownloadWShortcut(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) return;
     if (!downloadFunction) return;
     e.preventDefault();
     downloadFunction();
@@ -65,6 +68,7 @@ export default function useShortcuts({
   }
 
   function handleSaveWShortcut(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) return;
     if (
       (isWrappedWithClass(e, "noflow") && !showOverrideModal) ||
       !saveComponent
@@ -85,6 +89,7 @@ export default function useShortcuts({
   }
 
   function handleCodeWShortcut(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) return;
     if ((isWrappedWithClass(e, "noflow") && !openModal) || !handleCodeModal)
       return;
     e.preventDefault();
@@ -92,6 +97,7 @@ export default function useShortcuts({
   }
 
   function handleShareWShortcut(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) return;
     if (
       (isWrappedWithClass(e, "noflow") && !showconfirmShare) ||
       !shareComponent

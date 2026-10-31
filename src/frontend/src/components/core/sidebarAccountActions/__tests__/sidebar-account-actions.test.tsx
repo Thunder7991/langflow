@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import SidebarAccountActions from "..";
 
 const mockNavigate = jest.fn();
@@ -27,9 +28,11 @@ function renderActions() {
 }
 
 beforeEach(() => {
+  useAuthStore.setState({ platformWorkflowActions: ["read"] });
   mockNavigate.mockClear();
   useAlertStore.setState({ notificationList: [], notificationCenter: false });
 });
+afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
 
 it("opens the original account popup from Settings and preserves navigation", async () => {
   const user = userEvent.setup();

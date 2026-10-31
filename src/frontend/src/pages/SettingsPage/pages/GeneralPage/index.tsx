@@ -29,6 +29,24 @@ import PasswordFormComponent from "./components/PasswordForm";
 import ProfilePictureFormComponent from "./components/ProfilePictureForm";
 
 export const GeneralPage = () => {
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
+  // SSO 账号资料由平台管理。独立挂载本地偏好，避免触发头像/密码/API Key 请求。
+  return platformActions != null ? (
+    <div className="flex h-full w-full flex-col gap-6">
+      <GeneralPageHeaderComponent />
+      <p className="text-sm text-muted-foreground">
+        账号、密码与模型凭据由平台统一管理；此处可调整本地语言偏好。
+      </p>
+      <LanguageFormComponent />
+    </div>
+  ) : (
+    <NativeGeneralPage />
+  );
+};
+
+const NativeGeneralPage = () => {
   const { scrollId } = useParams();
 
   const [inputState, setInputState] = useState<patchUserInputStateType>(

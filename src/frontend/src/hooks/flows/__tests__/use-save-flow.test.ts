@@ -128,6 +128,31 @@ describe("useSaveFlow", () => {
     useAuthStore.setState({ platformWorkflowActions: null });
   });
 
+  it.each([401, 403, 503])(
+    "keeps the draft and saved baseline when the server refuses a save with %s",
+    async (status) => {
+      useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+      const draft = flowStoreState.currentFlow;
+      const saved = flowsManagerState.currentFlow;
+      const refusal = {
+        response: { status, data: { detail: "platform refused" } },
+      };
+      mockMutate.mockImplementationOnce((_payload, options) =>
+        options.onError(refusal),
+      );
+      const { result } = renderHook(() => useSaveFlow());
+      await expect(result.current()).rejects.toBe(refusal);
+      expect(flowStoreState.currentFlow).toBe(draft);
+      expect(flowsManagerState.currentFlow).toBe(saved);
+      expect(mockSetCurrentFlow).not.toHaveBeenCalled();
+      expect(mockSetFlows).not.toHaveBeenCalled();
+      expect(mockSetSaveLoading).toHaveBeenLastCalledWith(false);
+      expect(mockSetErrorData).toHaveBeenCalledWith(
+        expect.objectContaining({ list: ["platform refused"] }),
+      );
+    },
+  );
+
   it("persists empty-node flows instead of leaving the save promise pending", async () => {
     const { result } = renderHook(() => useSaveFlow());
 

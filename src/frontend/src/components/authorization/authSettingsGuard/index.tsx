@@ -5,10 +5,14 @@ import { useStoreStore } from "@/stores/storeStore";
 
 export const AuthSettingsGuard = ({ children }) => {
   const autoLogin = useAuthStore((state) => state.autoLogin);
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
   const hasStore = useStoreStore((state) => state.hasStore);
 
   // Hides the General settings if there is nothing to show
-  const showGeneralSettings = ENABLE_PROFILE_ICONS || hasStore || !autoLogin;
+  const showGeneralSettings =
+    platformActions != null || ENABLE_PROFILE_ICONS || hasStore || !autoLogin;
 
   if (showGeneralSettings) {
     return children;

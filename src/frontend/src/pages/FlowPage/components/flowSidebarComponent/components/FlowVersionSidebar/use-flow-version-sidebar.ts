@@ -16,6 +16,7 @@ import {
   useGetFlowVersions,
 } from "@/controllers/API/queries/flow-version";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useVersionPreviewStore from "@/stores/versionPreviewStore";
 import type { FlowVersionEntry } from "@/types/flow/version";
@@ -283,6 +284,7 @@ export function useFlowVersionSidebar(flowId: string) {
 
   const handleExport = useCallback(
     async (entry: FlowVersionEntry) => {
+      if (useAuthStore.getState().platformWorkflowActions != null) return;
       try {
         const response = await api.get(
           `${getURL("FLOWS")}/${flowId}/versions/${entry.id}`,
@@ -318,6 +320,7 @@ export function useFlowVersionSidebar(flowId: string) {
 
   const handleDelete = useCallback(
     (entry: FlowVersionEntry) => {
+      if (useAuthStore.getState().platformWorkflowActions != null) return;
       setDeleteDialogEntry(null);
       const entries = versions ?? [];
       const currentIndex = entries.findIndex((e) => e.id === entry.id);

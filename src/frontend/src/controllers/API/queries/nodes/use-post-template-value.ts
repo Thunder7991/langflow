@@ -1,4 +1,5 @@
 import type { UseMutationResult } from "@tanstack/react-query";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import { useUtilityStore } from "@/stores/utilityStore";
@@ -16,7 +17,7 @@ import { getURL } from "../../helpers/constants";
 import { appendProviderScope } from "../../helpers/provider-scope";
 import { UseRequestProcessor } from "../../services/request-processor";
 
-interface IPostTemplateValue {
+export interface IPostTemplateValue {
   value: unknown;
   // A discrete edit can run before this hook re-renders, so prefer the
   // caller's mutated template over the node snapshot captured by the hook.
@@ -65,6 +66,10 @@ export const usePostTemplateValue: useMutationFunctionType<
     // The hook may remain mounted briefly after navigation. Do not issue an
     // edit under the flow/project scope captured by a previous render.
     if (!capturedScopeIsCurrent()) return undefined;
+    // 只读页面不发起挂载刷新；防抖排队后的请求也读取当前能力。
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions !== null && (!actions.includes("update") || !flowId))
+      return undefined;
 
     const template = payload.template ?? node.template;
 
@@ -126,6 +131,9 @@ export const usePostTemplateValue: useMutationFunctionType<
     // The response is authorized only for the captured scope. A same-id node
     // in the newly active flow must never receive this template.
     if (!capturedScopeIsCurrent()) return undefined;
+    const latestActions = useAuthStore.getState().platformWorkflowActions;
+    if (latestActions !== null && !latestActions.includes("update"))
+      return undefined;
 
     const newTemplate = response.data;
     newTemplate.last_updated = lastUpdated;

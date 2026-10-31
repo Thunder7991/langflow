@@ -1,5 +1,7 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useEffect } from "react";
+import type { IPostTemplateValue } from "@/controllers/API/queries/nodes/use-post-template-value";
+import useAuthStore from "@/stores/authStore";
 import type { APIClassType, ResponseErrorDetailAPI } from "@/types/api";
 import useAlertStore from "../../stores/alertStore";
 import { mutateTemplate } from "../helpers/mutate-template";
@@ -12,13 +14,15 @@ const useFetchDataOnMount = (
   postTemplateValue: UseMutationResult<
     APIClassType | undefined,
     ResponseErrorDetailAPI,
-    any
+    IPostTemplateValue
   >,
 ) => {
   const setErrorData = useAlertStore((state) => state.setErrorData);
 
   useEffect(() => {
     async function fetchData() {
+      const actions = useAuthStore.getState().platformWorkflowActions;
+      if (actions !== null && !actions.includes("update")) return;
       const template = node.template[name];
       if (!template) return;
 

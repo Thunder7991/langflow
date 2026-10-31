@@ -122,7 +122,21 @@ describe("GeneralPage accessibility", () => {
       notificationList: [],
       tempNotificationList: [],
     });
-    useAuthStore.setState({ autoLogin: false });
+    useAuthStore.setState({ autoLogin: false, platformWorkflowActions: null });
+  });
+
+  it("keeps language preferences and omits profile/password management for platform users", () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read"] });
+    renderGeneralPage();
+    expect(
+      screen.getByText(/账号、密码与模型凭据由平台统一管理/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/current password/i),
+    ).not.toBeInTheDocument();
+    expect(mockResetPasswordMutate).not.toHaveBeenCalled();
+    expect(mockUpdateUserMutate).not.toHaveBeenCalled();
+    expect(mockAddApiKeyMutate).not.toHaveBeenCalled();
   });
 
   it("should_have_no_axe_violations_on_initial_render", async () => {

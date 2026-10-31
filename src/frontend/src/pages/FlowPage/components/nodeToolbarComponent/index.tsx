@@ -8,7 +8,9 @@ import useHandleNodeClass from "@/CustomNodes/hooks/use-handle-node-class";
 import { usePostTemplateValue } from "@/controllers/API/queries/nodes/use-post-template-value";
 import { usePostRetrieveVertexOrder } from "@/controllers/API/queries/vertex";
 import { customOpenNewTab } from "@/customization/utils/custom-open-new-tab";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAddFlow from "@/hooks/flows/use-add-flow";
+import useAuthStore from "@/stores/authStore";
 import type { APIClassType } from "@/types/api";
 import useAlertStore from "../../../../stores/alertStore";
 import { useDarkStore } from "../../../../stores/darkStore";
@@ -365,6 +367,31 @@ const NodeToolbarComponent = memo(
 
     const handleSelectChange = useCallback(
       (event: string) => {
+        const actions = useAuthStore.getState().platformWorkflowActions;
+        if (
+          actions != null &&
+          !actions.includes("update") &&
+          !["copy", "documentation"].includes(event)
+        )
+          return;
+        if (
+          useAuthStore.getState().platformWorkflowActions != null &&
+          [
+            "save",
+            "SaveAll",
+            "override",
+            "freezeAll",
+            "code",
+            "Share",
+            "Download",
+          ].includes(event)
+        ) {
+          setErrorData({
+            title: "此操作尚未开放",
+            list: [PLATFORM_UNAVAILABLE_REASON],
+          });
+          return;
+        }
         setSelectedValue(event);
 
         // Clear right-clicked state when user selects an option

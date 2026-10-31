@@ -3,8 +3,11 @@ import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { usePermissions } from "@/contexts/permissionsContext";
 import CustomFlowShareAction from "@/customization/components/custom-flow-share-action";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import type { FlowType } from "@/types/flow";
+import { extractApiErrorMessages } from "@/utils/apiError";
 import useDuplicateFlow from "../../hooks/use-handle-duplicate";
 import useSelectOptionsChange from "../../hooks/use-select-options-change";
 
@@ -23,22 +26,33 @@ const DropdownComponent = ({
 }: DropdownComponentProps) => {
   const { t } = useTranslation();
   const { can } = usePermissions();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const canEdit = can(flowData.id, "write");
-  const canExport = can(flowData.id, "read");
-  const canDuplicate = can(flowData.id, "create");
+  const canExport = !isPlatform && can(flowData.id, "read");
+  const canDuplicate = !isPlatform && can(flowData.id, "create");
   const canDelete = can(flowData.id, "delete");
   const setSuccessData = useAlertStore((state) => state.setSuccessData);
   const setErrorData = useAlertStore((state) => state.setErrorData);
   const { handleDuplicate } = useDuplicateFlow({ flow: flowData });
 
   const duplicateFlow = () => {
-    handleDuplicate().then(() =>
-      setSuccessData({
-        title: t("flow.duplicatedSuccess", {
-          type: flowData.is_component ? "Component" : "Flow",
+    if (!canDuplicate) return;
+    handleDuplicate()
+      .then(() =>
+        setSuccessData({
+          title: t("flow.duplicatedSuccess", {
+            type: flowData.is_component ? "Component" : "Flow",
+          }),
         }),
-      }),
-    );
+      )
+      .catch((error) =>
+        setErrorData({
+          title: t("errors.saveChanges"),
+          list: extractApiErrorMessages(error),
+        }),
+      );
   };
 
   const { handleSelectOptionsChange } = useSelectOptionsChange(
@@ -70,6 +84,7 @@ const DropdownComponent = ({
       </DropdownMenuItem>
       <DropdownMenuItem
         disabled={!canExport}
+        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
         onClick={(e) => {
           e.stopPropagation();
           handleSelectOptionsChange("export");
@@ -86,6 +101,7 @@ const DropdownComponent = ({
       </DropdownMenuItem>
       <DropdownMenuItem
         disabled={!canDuplicate}
+        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
         onClick={(e) => {
           e.stopPropagation();
           handleSelectOptionsChange("duplicate");
@@ -100,16 +116,19 @@ const DropdownComponent = ({
         />
         {t("flow.menu.duplicate")}
       </DropdownMenuItem>
-      <CustomFlowShareAction
-        resourceId={flowData.id}
-        resourceType="flow"
-        resourceName={flowData.name}
-      />
+      {!isPlatform && (
+        <CustomFlowShareAction
+          resourceId={flowData.id}
+          resourceType="flow"
+          resourceName={flowData.name}
+        />
+      )}
       <DropdownMenuItem
         disabled={!canDelete}
+        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
         onClick={(e) => {
           e.stopPropagation();
-          setOpenDelete(true);
+          if (canDelete) setOpenDelete(true);
         }}
         className="cursor-pointer text-destructive"
         data-testid="btn_delete_dropdown_menu"

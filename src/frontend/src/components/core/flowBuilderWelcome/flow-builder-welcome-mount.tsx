@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type SidebarSection, useSidebar } from "@/components/ui/sidebar";
 import useDeleteFlow from "@/hooks/flows/use-delete-flow";
 import useAssistantManagerStore from "@/stores/assistantManagerStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowBuilderWelcomeStore from "@/stores/flowBuilderWelcomeStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import TemplatesModal from "../../../modals/templatesModal";
@@ -22,6 +23,18 @@ import { useApplyTemplateToCurrentFlow } from "./hooks/use-apply-template-to-cur
  * ReactFlow viewport but stays under app-level modals.
  */
 export function FlowBuilderWelcomeMount() {
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
+  const close = useFlowBuilderWelcomeStore((state) => state.close);
+  useEffect(() => {
+    if (isPlatform) close();
+  }, [isPlatform, close]);
+  // 平台首期直接进入空画布，避免欢迎页自动加载模型或触发 AI/模板导入。
+  return isPlatform ? null : <NativeFlowBuilderWelcomeMount />;
+}
+
+function NativeFlowBuilderWelcomeMount() {
   const isOpen = useFlowBuilderWelcomeStore((state) => state.isOpen);
   const openedForFlowId = useFlowBuilderWelcomeStore(
     (state) => state.openedForFlowId,

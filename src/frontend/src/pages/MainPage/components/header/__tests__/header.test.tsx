@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import HeaderComponent from "../index";
 
@@ -48,7 +49,11 @@ interface DeleteModalProps {
 
 interface AlertStoreSelector {
   setSuccessData: jest.Mock;
+  setErrorData: jest.Mock;
 }
+const mockDownload = jest.fn();
+const mockSuccess = jest.fn();
+const mockError = jest.fn();
 
 // Mock dependencies
 jest.mock("@/components/common/genericIconComponent", () => ({
@@ -142,7 +147,7 @@ jest.mock("@/controllers/API/queries/flows/use-delete-delete-flows", () => ({
 
 jest.mock("@/controllers/API/queries/flows/use-get-download-flows", () => ({
   useGetDownloadFlows: () => ({
-    mutate: jest.fn(),
+    mutate: mockDownload,
     isPending: false,
   }),
 }));
@@ -151,7 +156,8 @@ jest.mock("@/stores/alertStore", () => ({
   __esModule: true,
   default: (selector: (arg: AlertStoreSelector) => unknown) =>
     selector({
-      setSuccessData: jest.fn(),
+      setSuccessData: mockSuccess,
+      setErrorData: mockError,
     }),
 }));
 
@@ -175,7 +181,36 @@ describe("HeaderComponent - TabIndex Behavior with Bulk Actions", () => {
     jest.clearAllMocks();
     act(() => {
       useUtilityStore.setState({ featureFlags: {} });
+      useAuthStore.setState({ platformWorkflowActions: null });
     });
+  });
+
+  it("disables export/delete and removes non-flow tabs even for a platform editor", () => {
+    act(() =>
+      useAuthStore.setState({
+        platformWorkflowActions: ["read", "create", "update"],
+      }),
+    );
+    render(<HeaderComponent {...defaultProps} selectedFlows={["flow1"]} />);
+    expect(screen.getByTestId("download-bulk-btn")).toBeDisabled();
+    expect(screen.getByTestId("delete-bulk-btn")).toBeDisabled();
+    expect(screen.queryByTestId("components-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-btn")).not.toBeInTheDocument();
+    expect(screen.getByTestId("new-project-btn")).toBeEnabled();
+  });
+
+  it("announces export success only after the download completes and reports failure", () => {
+    render(<HeaderComponent {...defaultProps} selectedFlows={["flow1"]} />);
+    fireEvent.click(screen.getByTestId("download-bulk-btn"));
+    expect(mockSuccess).not.toHaveBeenCalled();
+    const callbacks = mockDownload.mock.calls[0][1];
+    act(() => callbacks.onError(new Error("download failed")));
+    expect(mockError).toHaveBeenCalledWith(
+      expect.objectContaining({ list: ["download failed"] }),
+    );
+    expect(mockSuccess).not.toHaveBeenCalled();
+    act(() => callbacks.onSuccess());
+    expect(mockSuccess).toHaveBeenCalledTimes(1);
   });
 
   afterEach(() => {

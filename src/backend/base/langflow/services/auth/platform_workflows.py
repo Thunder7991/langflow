@@ -136,6 +136,103 @@ async def validate_update(request: Request, session: AsyncSession, payload, flow
         raise HTTPException(428, "Graph updates require If-Match")
 
 
+async def prepare_node_refresh(request: Request, payload, flow_id: UUID | None, user) -> bool:
+    """Authorize design-time refresh before any posted source or hook is executed."""
+    if not require_action(request, "update"):
+        return False
+    if flow_id is None or "project_id" in request.query_params:
+        raise HTTPException(422, "Node initialization requires an owned flow_id")
+    from langflow.services.database.models.flow.model import Flow
+    from langflow.services.deps import session_scope
+
+    async with session_scope() as session:
+        flow = await session.get(Flow, flow_id)
+        if flow is None or flow.user_id != user.id or flow.workspace_id is not None:
+            raise HTTPException(404, "Flow not found")
+        validate_fields(flow, existing=True)
+        await require_personal_destination(session, flow.folder_id, user.id)
+        from langflow.services.authorization.guards import FlowAction, ensure_flow_permission
+
+        await ensure_flow_permission(
+            user,
+            FlowAction.WRITE,
+            flow_id=flow.id,
+            flow_user_id=flow.user_id,
+            workspace_id=flow.workspace_id,
+            folder_id=flow.folder_id,
+        )
+
+    if payload.tool_mode or payload.field in {"code", "tool_mode", "tools_metadata"} or payload.field.startswith("_"):
+        raise HTTPException(403, "B2 暂不支持自定义代码、工具模式或内部字段初始化")
+
+    from importlib import import_module
+    from inspect import getsource
+    from types import SimpleNamespace
+
+    from langflow.api.v1.custom_component_policy import resolve_component_code_for_action
+    from langflow.services.deps import get_catalog_policy_service
+
+    trusted = resolve_component_code_for_action(
+        payload.code,
+        user=SimpleNamespace(is_superuser=False),
+        settings=SimpleNamespace(allow_custom_components=False),
+        snapshot=get_catalog_policy_service().snapshot,
+        disabled_detail="B2 仅允许服务器可信内置节点初始化, 不能执行自定义代码",
+        admin_only_detail="Custom component editing is disabled",
+    )
+    # “内置”不等于无副作用; 这里只开放已审查的纯表单更新源码。按完整服务器源码
+    # 比较, 避免同名插件/多类选择绕过, 也不依赖客户端的类型、hash 或实例配置。
+    reviewed = {
+        "input_output.chat": "ChatInput",
+        "input_output.chat_output": "ChatOutput",
+        "input_output.text": "TextInputComponent",
+        "input_output.text_output": "TextOutputComponent",
+        "models_and_agents.prompt": "PromptComponent",
+        "processing.parser": "ParserComponent",
+    }
+    class_name = next(
+        (
+            name
+            for module, name in reviewed.items()
+            if getsource(import_module(f"lfx.components.{module}")).strip() == trusted.strip()
+        ),
+        None,
+    )
+    if class_name is None:
+        raise HTTPException(403, "B2 暂不支持此节点的动态初始化; 模型、文件、MCP 等能力尚未开放")
+    if payload.get_class_name() not in {None, class_name}:
+        raise HTTPException(403, "Component class does not match trusted builtin")
+
+    for key, expected in {
+        "_frontend_node_flow_id": str(flow.id),
+        "_frontend_node_folder_id": str(flow.folder_id),
+    }.items():
+        supplied = payload.template.get(key, {})
+        if supplied and (not isinstance(supplied, dict) or supplied.get("value") != expected):
+            raise HTTPException(403, "Node scope does not match owned flow")
+    for name, field in payload.template.items():
+        if name.startswith("_") and name not in {"_type", "_frontend_node_flow_id", "_frontend_node_folder_id"}:
+            raise HTTPException(403, "Internal template fields are not enabled")
+        if isinstance(field, dict) and field.get("load_from_db"):
+            raise HTTPException(403, "B2 暂不支持数据库变量或凭据初始化")
+    # field_value 可以比模板快一拍; 两份都审查, 避免空模板携带秘密值绕过检查。
+    validate_graph({"template": payload.template, "field_value": payload.field_value})
+    field_template = payload.template.get(payload.field)
+    if not isinstance(field_template, dict):
+        raise HTTPException(422, "Unknown node input field")
+    validate_graph({payload.field: {**field_template, "value": payload.field_value}})
+    if class_name == "TextInputComponent" and (
+        payload.template.get("use_global_variable", {}).get("value")
+        or (payload.field == "use_global_variable" and payload.field_value)
+    ):
+        raise HTTPException(403, "B2 暂不支持全局变量输入")
+    payload.code = trusted
+    # 原生更新钩子有的读取 self.<field>, 有的读取 field_value, 两者必须对应同次编辑。
+    payload.template[payload.field]["value"] = payload.field_value
+    payload.frontend_node = {"metadata": {"component_class_name": class_name}}
+    return True
+
+
 async def effective_permissions(request: Request, session: AsyncSession, body, user_id: UUID) -> dict | None:
     identity = context(request)
     if identity is None:

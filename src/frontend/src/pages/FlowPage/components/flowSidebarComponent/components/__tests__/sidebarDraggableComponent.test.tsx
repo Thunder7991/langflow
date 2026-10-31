@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import useAuthStore from "@/stores/authStore";
 import { axe } from "@/utils/a11y-test";
 import { SidebarDraggableComponent } from "../sidebarDraggableComponent";
 
@@ -277,11 +278,39 @@ describe("SidebarDraggableComponent", () => {
   };
 
   beforeEach(() => {
+    useAuthStore.setState({ platformWorkflowActions: null });
     jest.clearAllMocks();
     mockOnValueChange = undefined;
     mockDeleteFlow.mockClear();
     mockPermissionPending = false;
     mockPermissionDenied = false;
+  });
+
+  it("blocks unreviewed platform nodes before drag, click and context export", () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+    render(<SidebarDraggableComponent {...defaultProps} itemName="MCPTools" />);
+    const row = screen.getByTestId("TestSectionTest Component");
+    expect(row).toHaveAttribute("draggable", "false");
+    fireEvent.doubleClick(row);
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(mockAddComponentFn).not.toHaveBeenCalled();
+    expect(screen.getByTestId("select-item-download")).toBeDisabled();
+  });
+
+  it.each([
+    "ChatInput",
+    "ChatOutput",
+    "TextInput",
+    "TextOutput",
+    "Prompt Template",
+    "ParserComponent",
+  ])("keeps reviewed %s editable in platform mode", (itemName) => {
+    useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+    render(<SidebarDraggableComponent {...defaultProps} itemName={itemName} />);
+    const row = screen.getByTestId("TestSectionTest Component");
+    expect(row).toHaveAttribute("draggable", "true");
+    fireEvent.doubleClick(row);
+    expect(mockAddComponentFn).toHaveBeenCalledWith(mockAPIClass, itemName);
   });
 
   describe("Accessibility", () => {

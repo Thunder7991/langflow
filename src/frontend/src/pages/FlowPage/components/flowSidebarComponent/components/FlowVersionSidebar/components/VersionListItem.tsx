@@ -8,6 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
+import useAuthStore from "@/stores/authStore";
 import type { FlowVersionEntry } from "@/types/flow/version";
 import { cn } from "@/utils/utils";
 import { formatTimestamp } from "../utils";
@@ -30,6 +32,9 @@ export default function VersionListItem({
   onDeleteClick,
 }: VersionListItemProps) {
   const { t } = useTranslation();
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   return (
     <SidebarMenuItem
       className={cn(
@@ -86,7 +91,11 @@ export default function VersionListItem({
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="start" className="w-40">
               <DropdownMenuItem
-                onClick={() => onExport(entry)}
+                onClick={() => {
+                  if (!isPlatform) onExport(entry);
+                }}
+                disabled={isPlatform}
+                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
                 className="cursor-pointer"
               >
                 <ForwardedIconComponent
@@ -96,7 +105,11 @@ export default function VersionListItem({
                 {t("flow.menu.export")}
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => onDeleteClick(entry)}
+                onClick={() => {
+                  if (!isPlatform) onDeleteClick(entry);
+                }}
+                disabled={isPlatform}
+                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
                 className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
               >
                 <ForwardedIconComponent

@@ -40,6 +40,7 @@ import {
 import { useCustomNavigate } from "@/customization/hooks/use-custom-navigate";
 import { track } from "@/customization/utils/analytics";
 import { customGetDownloadFolderBlob } from "@/customization/utils/custom-get-download-folders";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import { createFileUpload } from "@/helpers/create-file-upload";
 import { getObjectsFromFilelist } from "@/helpers/get-objects-from-filelist";
 import useUploadFlow from "@/hooks/flows/use-upload-flow";
@@ -77,7 +78,10 @@ const ProjectRenamePermission = ({
   children: (canRename: boolean) => ReactNode;
 }) => {
   const { can } = usePermissions();
-  return children(can(projectId, "write"));
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
+  return children(!isPlatform && can(projectId, "write"));
 };
 
 const SideBarFoldersButtonsComponent = ({
@@ -86,6 +90,10 @@ const SideBarFoldersButtonsComponent = ({
   handleFilesClick,
 }: SideBarFoldersButtonsComponentProps) => {
   const location = useLocation();
+  const platformActions = useAuthStore(
+    (state) => state.platformWorkflowActions,
+  );
+  const isPlatform = platformActions != null;
   const pathname = location.pathname;
   const folders = useFolderStore((state) => state.folders);
   const loading = !folders;
@@ -177,6 +185,7 @@ const SideBarFoldersButtonsComponent = ({
     isDeletingFolder;
 
   const handleUploadFlowsToFolder = () => {
+    if (isPlatform) return;
     createFileUpload().then((files: File[]) => {
       if (files?.length === 0) {
         return;
@@ -236,6 +245,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleDownloadFolder = (id: string, folderName: string) => {
+    if (isPlatform) return;
     mutateDownloadFolder(
       {
         folderId: id,
@@ -254,6 +264,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   function addNewFolder() {
+    if (platformActions != null && !platformActions.includes("create")) return;
     mutateAddFolder(
       {
         data: {
@@ -294,6 +305,7 @@ const SideBarFoldersButtonsComponent = ({
   }, [folders]);
 
   const handleEditNameFolder = async (item) => {
+    if (isPlatform) return;
     const newEditFolders = editFolders.map((obj) => {
       if (obj.id === item.id) {
         return { id: item.id, edit: false };
@@ -365,6 +377,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleSelectFolderToRename = (item) => {
+    if (isPlatform) return;
     if (!foldersNames[item.id]) {
       setFoldersNames({ [item.id]: item.name });
     }
@@ -435,10 +448,12 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleFilesNavigation = () => {
+    if (isPlatform) return;
     _navigate("/assets/files");
   };
 
   const handleKnowledgeNavigation = () => {
+    if (isPlatform) return;
     _navigate("/assets/knowledge-bases");
   };
 
@@ -599,7 +614,7 @@ const SideBarFoldersButtonsComponent = ({
         </SidebarGroup>
         <div className="flex-1" />
 
-        {ENABLE_MCP_NOTICE && !isDismissedMcpDialog && (
+        {!isPlatform && ENABLE_MCP_NOTICE && !isDismissedMcpDialog && (
           <div className="p-2">
             <MCPServerNotice handleDismissDialog={handleDismissMcpDialog} />
           </div>
@@ -615,7 +630,7 @@ const SideBarFoldersButtonsComponent = ({
           {projectSidebar.footer}
           {ENABLE_FILE_MANAGEMENT && (
             <>
-              {ENABLE_KNOWLEDGE_BASES && (
+              {!isPlatform && ENABLE_KNOWLEDGE_BASES && (
                 <SidebarMenuButton
                   onClick={handleKnowledgeNavigation}
                   size="md"
@@ -627,6 +642,9 @@ const SideBarFoldersButtonsComponent = ({
               )}
               <SidebarMenuButton
                 onClick={handleFilesNavigation}
+                disabled={isPlatform}
+                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                data-testid="my-files-button"
                 size="md"
                 className={cn("text-sm", projectSidebar.footerItemClassName)}
               >

@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { usePostUploadFlowToFolder } from "@/controllers/API/queries/folders/use-post-upload-to-folder";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import { handleBlockedSave } from "@/hooks/flows/handle-blocked-save";
 import useSaveFlow from "@/hooks/flows/use-save-flow";
+import useAuthStore from "@/stores/authStore";
 import useAlertStore from "../../../../stores/alertStore";
 import useFlowsManagerStore from "../../../../stores/flowsManagerStore";
 import { useFolderStore } from "../../../../stores/foldersStore";
@@ -21,6 +23,15 @@ const useFileDrop = (folderId: string) => {
 
   const { mutate: uploadFlowToFolder } = usePostUploadFlowToFolder();
   const handleFileDrop = async (e, folderId) => {
+    if (useAuthStore.getState().platformWorkflowActions != null) {
+      setFolderDragging(false);
+      setFolderIdDragging("");
+      setErrorData({
+        title: t("errors.upload"),
+        list: [PLATFORM_UNAVAILABLE_REASON],
+      });
+      return;
+    }
     if (e.dataTransfer.types.some((type) => type === "Files")) {
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const firstFile = e.dataTransfer.files[0];

@@ -45,6 +45,7 @@ import { getURL } from "@/controllers/API/helpers/constants";
 import { useGetBuildsQuery } from "@/controllers/API/queries/_builds";
 import CustomLoader from "@/customization/components/custom-loader";
 import { track } from "@/customization/utils/analytics";
+import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useApplyFlowToCanvas from "@/hooks/flows/use-apply-flow-to-canvas";
 import useAutoSaveFlow from "@/hooks/flows/use-autosave-flow";
 import { useFlowEvents } from "@/hooks/flows/use-flow-events";
@@ -52,6 +53,7 @@ import useUploadFlow from "@/hooks/flows/use-upload-flow";
 import { useAddComponent } from "@/hooks/use-add-component";
 import InspectionPanel from "@/pages/FlowPage/components/InspectionPanel";
 import useAssistantManagerStore from "@/stores/assistantManagerStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowBuilderWelcomeStore from "@/stores/flowBuilderWelcomeStore";
 import { nodeColorsName } from "@/utils/styleUtils";
 import { isSupportedNodeTypes } from "@/utils/utils";
@@ -569,6 +571,14 @@ export default function Page({
   }
 
   function handleDownload(e: KeyboardEvent) {
+    if (useAuthStore.getState().platformWorkflowActions != null) {
+      e.preventDefault();
+      setErrorData({
+        title: "导出尚未开放",
+        list: [PLATFORM_UNAVAILABLE_REASON],
+      });
+      return;
+    }
     if (!isWrappedWithClass(e, "noflow")) {
       e.preventDefault();
       (e as unknown as Event).stopImmediatePropagation();

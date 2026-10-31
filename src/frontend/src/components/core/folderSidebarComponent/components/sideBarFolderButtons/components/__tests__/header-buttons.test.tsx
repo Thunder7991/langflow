@@ -34,7 +34,8 @@ let mockUserData: { optins: Record<string, boolean> } | undefined;
 
 jest.mock("@/stores/authStore", () => ({
   __esModule: true,
-  default: () => mockUserData,
+  default: (selector) =>
+    selector({ userData: mockUserData, platformWorkflowActions: null }),
 }));
 
 jest.mock("../add-folder-button", () => ({
