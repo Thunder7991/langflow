@@ -1,6 +1,14 @@
 import useAuthStore from "@/stores/authStore";
 import { syncPlatformWorkflowActions } from "../platform-workflow-actions";
 
+it("accepts only the explicit dry_run action, without enabling general execute", () => {
+  syncPlatformWorkflowActions("read,dry_run,execute,publish");
+  expect(useAuthStore.getState().platformWorkflowActions).toEqual([
+    "read",
+    "dry_run",
+  ]);
+});
+
 it("keeps explicit file capabilities without deriving them from flow update", () => {
   syncPlatformWorkflowActions(
     "read,update,file_read,file_upload,file_download,delete",

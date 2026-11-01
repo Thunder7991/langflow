@@ -8,6 +8,7 @@ export const URLs = {
   FILES: `files`,
   FILE_MANAGEMENT: `files`,
   PLATFORM_FILES: "platform-files",
+  PLATFORM_FLOWS: "platform-flows",
   VERSION: `version`,
   MESSAGES: `monitor/messages`,
   BUILDS: `monitor/builds`,

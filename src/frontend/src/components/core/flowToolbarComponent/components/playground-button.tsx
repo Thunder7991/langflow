@@ -6,6 +6,7 @@ import { usePermissions } from "@/contexts/permissionsContext";
 import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAuthStore from "@/stores/authStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
+import PlatformDryRunButton from "./platform-dry-run-button";
 
 interface PlaygroundButtonProps {
   hasIO: boolean;
@@ -37,6 +38,8 @@ const PlaygroundButton = ({ hasIO }: PlaygroundButtonProps) => {
   const currentFlowId = useFlowsManagerStore((state) => state.currentFlowId);
   // Running a flow in the playground executes it → gate on the execute action.
   const canRun = can(currentFlowId, "execute");
+
+  if (isPlatform) return <PlatformDryRunButton />;
 
   if (!canRun) {
     return (

@@ -168,7 +168,8 @@ def _actions(identity: dict) -> list[str]:
         or identity.get("resourceScope") != "personal"
         or not isinstance(actions, list)
         or not all(
-            isinstance(a, str) and a in {"read", "create", "update", "file_read", "file_upload", "file_download"}
+            isinstance(a, str)
+            and a in {"read", "create", "update", "dry_run", "file_read", "file_upload", "file_download"}
             for a in actions
         )
         or "read" not in actions
@@ -409,6 +410,8 @@ class PlatformSsoMiddleware:
                 path,
             )
             action = None
+            if method == "POST" and re.fullmatch(r"/api/v2/platform-flows/[0-9a-fA-F-]{36}/dry-run", path):
+                action = "dry_run"
             if path == "/api/v2/platform-files" or re.fullmatch(
                 r"/api/v2/platform-files/(?:policy|[0-9a-fA-F-]{36}(?:/content)?)", path
             ):

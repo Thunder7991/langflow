@@ -10,6 +10,7 @@ export function syncPlatformWorkflowActions(header: unknown) {
         "read",
         "create",
         "update",
+        "dry_run",
         "file_read",
         "file_upload",
         "file_download",

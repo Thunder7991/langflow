@@ -6,8 +6,10 @@ const startedStars = Number(window.localStorage.getItem("githubStars")) ?? 0;
 
 export const useDarkStore = create<DarkStoreType>((set, get) => ({
   dark: (() => {
-    const stored = window.localStorage.getItem("isDark");
-    if (stored !== null) return JSON.parse(stored);
+    // 与 HTML 首屏和主题设置使用同一偏好，避免旧 isDark 缓存引起二次切换。
+    const preference = window.localStorage.getItem("themePreference");
+    if (preference === "light") return false;
+    if (preference === "dark") return true;
     return window.matchMedia("(prefers-color-scheme: dark)").matches;
   })(),
   stars: startedStars,

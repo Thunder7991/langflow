@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import FlowMenu from "@/components/core/appHeaderComponent/components/FlowMenu";
 import { PermissionsProvider } from "@/contexts/permissionsContext";
@@ -8,6 +9,40 @@ export function DashboardWrapperPage() {
   useTheme();
   const currentFlow = useFlowStore((state) => state.currentFlow);
   const onFlowPage = useFlowStore((state) => state.onFlowPage);
+
+  useEffect(() => {
+    if (window.parent === window) return;
+    let paintFrame = 0;
+    const handleMessage = (event: MessageEvent) => {
+      if (
+        event.source !== window.parent ||
+        !/^https?:\/\//.test(event.origin) ||
+        event.data?.channel !== "workflow-ui" ||
+        event.data.status !== "check-ready" ||
+        typeof event.data.requestId !== "string"
+      )
+        return;
+      cancelAnimationFrame(paintFrame);
+      // 这里只报告布局可展示；身份认证仍由 SSO 桥接负责。两帧之间留出主题和布局绘制机会。
+      paintFrame = requestAnimationFrame(() => {
+        paintFrame = requestAnimationFrame(() => {
+          window.parent.postMessage(
+            {
+              channel: "workflow-ui",
+              status: "ready",
+              requestId: event.data.requestId,
+            },
+            event.origin,
+          );
+        });
+      });
+    };
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      cancelAnimationFrame(paintFrame);
+    };
+  }, []);
 
   return (
     <PermissionsProvider
