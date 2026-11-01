@@ -58,6 +58,11 @@ def validate_graph(data: dict | None, *, verified_files: set[str] | None = None)
             if isinstance(code, dict) and code.get("value"):
                 from types import SimpleNamespace
 
+                from langflow.services.auth import platform_models
+
+                if platform_models.is_source(code["value"]):
+                    platform_models.configuration(value, required=False)
+
                 code["value"] = resolve_component_code_for_action(
                     code["value"],
                     user=SimpleNamespace(is_superuser=False),
@@ -129,6 +134,9 @@ async def validate_create(request: Request, session: AsyncSession, payload, user
 
     verified = await validate_references(request, session, payload.data, user_id)
     validate_graph(payload.data, verified_files=verified)
+    from langflow.services.auth.platform_models import validate_references as validate_models
+
+    await validate_models(request, payload.data)
 
 
 async def validate_update(request: Request, session: AsyncSession, payload, flow, user_id: UUID) -> None:
@@ -146,6 +154,9 @@ async def validate_update(request: Request, session: AsyncSession, payload, flow
     data = payload.data if payload.data is not None else flow.data
     verified = await validate_references(request, session, data, user_id)
     validate_graph(data, verified_files=verified)
+    from langflow.services.auth.platform_models import validate_references as validate_models
+
+    await validate_models(request, data)
     if payload.data is not None and not request.headers.get("if-match"):
         raise HTTPException(428, "Graph updates require If-Match")
 
@@ -212,8 +223,12 @@ async def prepare_node_refresh(request: Request, payload, flow_id: UUID | None, 
         ),
         None,
     )
+    from langflow.services.auth.platform_models import is_source
+
+    if is_source(trusted):
+        class_name = "PlatformModelComponent"
     if class_name is None:
-        raise HTTPException(403, "当前仅支持已审查的六类内置节点; 通用文件解析、模型和 MCP 节点尚未开放")
+        raise HTTPException(403, "当前仅支持已审查的基础节点和平台模型; 通用文件解析、供应商模型和 MCP 节点尚未开放")
     if payload.get_class_name() not in {None, class_name}:
         raise HTTPException(403, "Component class does not match trusted builtin")
 

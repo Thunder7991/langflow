@@ -320,6 +320,14 @@ async def get_all(
             )
 
         locale = getattr(request.state, "locale", "en")
+        if getattr(request.state, "platform_workflow", None) is not None:
+            from langflow.services.auth.platform_models import template
+
+            if not {"PlatformModel", "platform.PlatformModel", "PlatformModelComponent"}.intersection(
+                catalog_policy_snapshot.blocked_component_keys
+            ):
+                # 不修改共享目录缓存, 也不在目录加载时请求模型服务。
+                visible_types_en = {**visible_types_en, "platform": {"PlatformModel": template()}}
         all_types = translate_component_dict(visible_types_en, locale) if locale != "en" else visible_types_en
 
         component_display_names = build_component_display_names(visible_types_en)
@@ -2028,6 +2036,13 @@ async def custom_component_update(
     from langflow.services.auth.platform_workflows import prepare_node_refresh
 
     await prepare_node_refresh(request, code_request, flow_id, user)
+    from langflow.services.auth import platform_models
+
+    if getattr(request.state, "platform_workflow", None) is not None and platform_models.is_source(code_request.code):
+        try:
+            return await platform_models.refresh(request, code_request)
+        except HTTPException as exc:
+            return await platform_models.session_failure(request.state.platform_workflow, exc)
     # Updating a custom component instantiates (and partially executes) posted
     # code, a create/write-class action. Enforce the external access ceiling
     # directly so a "viewer" external identity is denied; editor/admin (and all

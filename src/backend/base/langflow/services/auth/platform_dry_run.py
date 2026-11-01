@@ -94,3 +94,111 @@ async def execute_text_pair(
     if not isinstance(output, str) or len(output.encode("utf-8")) > MAX_TEXT_BYTES:
         raise RuntimeError
     return output
+
+
+def model_chain(data: dict) -> tuple[str, str, str, str, dict]:
+    from langflow.services.auth import platform_models
+
+    if len(json.dumps(data).encode()) > 256 * 1024 or len(data.get("edges", [])) != 2:  # noqa: PLR2004
+        raise HTTPException(422, "Model dry run requires TextInput -> PlatformModel -> TextOutput")
+    validate_graph(data)
+    model_nodes = [node for node in data["nodes"] if node.get("data", {}).get("type") == "PlatformModel"]
+    if len(model_nodes) != 1:
+        raise HTTPException(403, "Only one platform model node is allowed")
+    model = model_nodes[0]
+    model_id = model.get("id")
+    body = model["data"]
+    definition = body["node"]
+    fields = definition["template"]
+    if (
+        not isinstance(model_id, str)
+        or not model_id
+        or len(model_id) > MAX_NODE_ID_LENGTH
+        or body.get("id") != model_id
+        or model.get("type") != "genericNode"
+        or definition.get("tool_mode")
+        or not platform_models.is_source(fields.get("code", {}).get("value"))
+    ):
+        raise HTTPException(403, "Invalid platform model identity or source")
+    config = platform_models.configuration(fields)
+    inbound = [edge for edge in data["edges"] if edge.get("target") == model_id]
+    outbound = [edge for edge in data["edges"] if edge.get("source") == model_id]
+    if len(inbound) != 1 or len(outbound) != 1 or inbound[0] is outbound[0]:
+        raise HTTPException(422, "Invalid platform model connection")
+    try:
+        target_handle = json.loads(inbound[0]["targetHandle"])
+        source_handle = json.loads(outbound[0]["sourceHandle"])
+        if (
+            target_handle["id"] != model_id
+            or target_handle["fieldName"] != "input_value"
+            or source_handle["id"] != model_id
+            or source_handle["name"] != "text"
+        ):
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, "Invalid platform model handles") from exc
+    # 复用已验证的文本首尾检查; 执行图仍由服务器类重建, 不使用保存的输出方法。
+    source, target, text = text_pair(
+        {
+            "nodes": [node for node in data["nodes"] if node is not model],
+            "edges": [
+                {
+                    "source": inbound[0]["source"],
+                    "target": outbound[0]["target"],
+                    "sourceHandle": inbound[0]["sourceHandle"],
+                    "targetHandle": outbound[0]["targetHandle"],
+                }
+            ],
+        }
+    )
+    if model_id in {source, target}:
+        raise HTTPException(422, "Duplicate node identity")
+    return source, target, text, model_id, config
+
+
+async def execute_model_chain(source_id, target_id, text, model_id, configuration, *, invoke, flow_id, user_id, run_id):
+    from lfx.components.input_output.text import TextInputComponent
+    from lfx.components.input_output.text_output import TextOutputComponent
+    from lfx.graph import Graph
+
+    from langflow.services.auth.platform_model_component import PlatformModelComponent
+    from langflow.services.auth.platform_models import runtime
+
+    platform_failure = None
+
+    async def delegated(**parameters):
+        nonlocal platform_failure
+        try:
+            return await invoke(**parameters)
+        except HTTPException as exc:
+            platform_failure = exc
+            raise
+
+    start = TextInputComponent(_id=source_id)
+    start.set(input_value=text, use_global_variable=False)
+    model = PlatformModelComponent(_id=model_id)
+    model.set(input_value=start.text_response, **configuration)
+    end = TextOutputComponent(_id=target_id)
+    end.set(input_value=model.text_response)
+    graph = Graph(start, end, flow_id=flow_id, user_id=user_id)
+    graph.set_run_id(run_id)
+    token = runtime.set(delegated)
+    output = None
+    try:
+        async for result in graph.async_start(max_iterations=3, fallback_to_env_vars=False):
+            if platform_failure:
+                raise platform_failure
+            if hasattr(result, "valid") and not result.valid:
+                raise RuntimeError
+            if hasattr(result, "vertex") and result.vertex.id == target_id:
+                output = result.result_dict.results["text"].text
+        if not isinstance(output, str) or len(output.encode("utf-8")) > MAX_TEXT_BYTES:
+            raise RuntimeError
+    except Exception:
+        if platform_failure:
+            raise platform_failure from None
+        raise
+    else:
+        return output
+    finally:
+        runtime.reset(token)

@@ -153,3 +153,76 @@ it("requires a known owner and read access even when dry_run is present", () => 
   expect(api.post).not.toHaveBeenCalled();
   view.unmount();
 });
+
+it("distinguishes an already accepted model run from a saved-version conflict", async () => {
+  (api.post as jest.Mock).mockRejectedValue({
+    response: {
+      status: 409,
+      data: { detail: { code: "platform_model_run_accepted" } },
+    },
+  });
+  const view = render(<PlaygroundButton hasIO />);
+  fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "本次模型运行已受理",
+  );
+  expect(screen.queryByText(/服务端流程版本已变化/)).not.toBeInTheDocument();
+  expect(useFlowStore.getState().currentFlow).toEqual(saved);
+  view.unmount();
+});
+
+it("runs a saved platform model graph without sending credentials or model overrides", async () => {
+  const nodes = [
+    {
+      id: "platform-model",
+      type: "genericNode",
+      data: { type: "PlatformModel" },
+    },
+  ];
+  const modelFlow = { ...saved, data: { nodes, edges: [] } };
+  useFlowsManagerStore.setState({ currentFlow: modelFlow as never });
+  useFlowStore.setState({
+    currentFlow: modelFlow as never,
+    nodes: nodes as never,
+  });
+  (api.post as jest.Mock).mockResolvedValue({
+    data: {
+      status: "succeeded",
+      run_id: "model-run",
+      flow_id: saved.id,
+      version_token: saved.version_token,
+      outputs: [{ node_id: "out", text: "平台模型输出" }],
+    },
+  });
+  const view = render(<PlaygroundButton hasIO />);
+  fireEvent.click(screen.getByRole("button", { name: "平台模型调试" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  expect(await screen.findByText("平台模型输出")).toBeInTheDocument();
+  expect(api.post).toHaveBeenCalledWith(
+    expect.stringContaining("/dry-run"),
+    {},
+    expect.objectContaining({ timeout: 60000 }),
+  );
+  expect(useFlowStore.getState().currentFlow).toEqual(modelFlow);
+  view.unmount();
+});
+
+it("warns that an uncertain model failure can still be billed", async () => {
+  const nodes = [{ id: "model", data: { type: "PlatformModel" } }];
+  const modelFlow = { ...saved, data: { nodes, edges: [] } };
+  useFlowsManagerStore.setState({ currentFlow: modelFlow as never });
+  useFlowStore.setState({
+    currentFlow: modelFlow as never,
+    nodes: nodes as never,
+  });
+  (api.post as jest.Mock).mockRejectedValue({ response: { status: 502 } });
+  const view = render(<PlaygroundButton hasIO />);
+  fireEvent.click(screen.getByRole("button", { name: "平台模型调试" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "重复运行可能再次计费",
+  );
+  expect(api.post).toHaveBeenCalledTimes(1);
+  view.unmount();
+});

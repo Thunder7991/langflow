@@ -1225,6 +1225,9 @@ def create_app():
     # Replaces FastAPI's default 422 handler, which echoes each submitted value
     # (credentials included) back in the error body.
     app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+    from langflow.services.auth.platform_models import PlatformModelSessionExpired, session_exception_handler
+
+    app.add_exception_handler(PlatformModelSessionExpired, session_exception_handler)
 
     @app.exception_handler(DeploymentGuardError)
     async def deployment_guard_exception_handler(_request: Request, exc: DeploymentGuardError):

@@ -366,10 +366,23 @@ class PlatformSsoMiddleware:
                 actions = _actions(current_identity)
                 return actions
 
+            async def model_call(action, payload):
+                nonlocal actions
+                from langflow.services.auth import platform_models
+
+                try:
+                    return await platform_models.call(action, {**payload, "grant": claims["grant"]}, self.settings)
+                except HTTPException as exc:
+                    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                        actions = []
+                        raise platform_models.PlatformModelSessionExpired from None
+                    raise
+
             scope.setdefault("state", {})["platform_workflow"] = {
                 "actions": actions,
                 "user_id": claims["sub"],
                 "recheck": recheck,
+                "model_call": model_call,
                 "host_origin": self.settings.host_origin.rstrip("/"),
             }
             method = scope["method"]
@@ -412,6 +425,8 @@ class PlatformSsoMiddleware:
             action = None
             if method == "POST" and re.fullmatch(r"/api/v2/platform-flows/[0-9a-fA-F-]{36}/dry-run", path):
                 action = "dry_run"
+            if method == "GET" and path == "/api/v2/platform-models":
+                action = "read"
             if path == "/api/v2/platform-files" or re.fullmatch(
                 r"/api/v2/platform-files/(?:policy|[0-9a-fA-F-]{36}(?:/content)?)", path
             ):

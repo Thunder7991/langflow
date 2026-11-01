@@ -34,6 +34,8 @@ export default function PlatformDryRunButton() {
   const current = useFlowStore((state) => state.currentFlow);
   const saved = useFlowsManagerStore((state) => state.currentFlow);
   const nodes = useFlowStore((state) => state.nodes);
+  const usesModel = nodes.some((node) => node.data?.type === "PlatformModel");
+  const label = usesModel ? "平台模型调试" : "纯文本调试";
   const edges = useFlowStore((state) => state.edges);
   const edited = useFlowStore((state) => state.userEditedSinceLoad);
   const version = saved?.version_token;
@@ -66,7 +68,7 @@ export default function PlatformDryRunButton() {
       setError("流程、版本或权限已变化，本次结果不再显示。");
     }
     setResult(null);
-  }, [owner, current?.id, version, canRun, dirty, sameFlow]);
+  }, [owner, current?.id, version, canRun, dirty, sameFlow, usesModel]);
   useEffect(() => () => waiting.current?.abort(), []);
 
   const handleOpen = (next: boolean) => {
@@ -101,7 +103,7 @@ export default function PlatformDryRunButton() {
         {
           signal: controller.signal,
           headers: { "If-Match": version },
-          timeout: 15000,
+          timeout: usesModel ? 60000 : 15000,
         },
       );
       if (controller.signal.aborted || waiting.current !== controller) return;
@@ -125,14 +127,25 @@ export default function PlatformDryRunButton() {
       if (controller.signal.aborted || waiting.current !== controller) return;
       const status = (failure as { response?: { status?: number } }).response
         ?.status;
+      const runAlreadyAccepted =
+        (
+          failure as {
+            response?: { data?: { detail?: { code?: string } } };
+          }
+        ).response?.data?.detail?.code === "platform_model_run_accepted";
       setError(
-        status === 409
-          ? "服务端流程版本已变化，请先加载最新版本再运行；当前草稿保留。"
-          : status === 429
-            ? "当前已有一次调试正在执行，请稍后重试。"
-            : status === 504
-              ? "纯文本调试超时，请稍后重试。"
-              : extractApiErrorMessages(failure).join("；"),
+        status === 409 && runAlreadyAccepted
+          ? "本次模型运行已受理，结果可能未知。请勿自动重试；核对后再发起新运行。"
+          : status === 409
+            ? "服务端流程版本已变化，请先加载最新版本再运行；当前草稿保留。"
+            : status === 429
+              ? "当前已有一次调试正在执行，请稍后重试。"
+              : usesModel &&
+                  (status === 502 || status === 503 || status === 504)
+                ? "平台模型调试失败或结果未知，重复运行可能再次计费；本次请求不会自动重试。"
+                : status === 504
+                  ? "受控调试超时。模型调用结果可能未知，请核对后再发起新运行。"
+                  : extractApiErrorMessages(failure).join("；"),
       );
     } finally {
       if (waiting.current === controller) {
@@ -148,18 +161,20 @@ export default function PlatformDryRunButton() {
         size="sm"
         variant="ghost"
         disabled={!canRun || !sameFlow || !version}
-        title={!canRun ? "需要工作流调试权限" : "运行已保存的纯文本流程"}
+        title={!canRun ? "需要工作流调试权限" : "运行已保存的受控流程"}
         onClick={() => handleOpen(true)}
       >
-        纯文本调试
+        {label}
       </Button>
       <Dialog open={open} onOpenChange={handleOpen}>
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>纯文本调试</DialogTitle>
+            <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
-              本轮仅支持文本输入连接文本输出，运行已保存版本，执行阶段限时 10
-              秒。模型、文件解析和 MCP 尚未开放。
+              {usesModel
+                ? "仅支持文本输入 → 平台模型 → 文本输出，运行已保存版本。模型连接需有凭据使用权限及 secret_use 能力，供应商调用限时 30 秒，不自动重试。"
+                : "仅支持文本输入 → 文本输出，运行已保存版本，执行阶段限时 10 秒。"}
+              文件解析、工具调用和 MCP 尚未开放。
             </DialogDescription>
           </DialogHeader>
           {dirty && (
