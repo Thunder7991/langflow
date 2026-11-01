@@ -7,6 +7,7 @@ import { useIsFlowReadOnly } from "@/contexts/permissionsContext";
 import { handleBlockedSave } from "@/hooks/flows/handle-blocked-save";
 import useSaveFlow from "@/hooks/flows/use-save-flow";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import type { FlowType } from "@/types/flow";
@@ -75,6 +76,9 @@ const FlowSettingsComponent = ({
   const flows = useFlowsManagerStore((state) => state.flows);
   const flow = flowData ?? currentFlow;
   const isReadOnly = useIsFlowReadOnly(flow?.id);
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const [name, setName] = useState(flow?.name ?? "");
   const [description, setDescription] = useState(flow?.description ?? "");
   const [locked, setLocked] = useState<boolean>(flow?.locked ?? false);
@@ -162,18 +166,20 @@ const FlowSettingsComponent = ({
           >
             {t("modal.cancelButton")}
           </Button>
-          <Form.Submit asChild>
-            <Button
-              variant="default"
-              size="sm"
-              data-testid="save-flow-settings"
-              loading={isSaving}
-              disabled={disableSave || isReadOnly}
-              title={isReadOnly ? t("version.readOnly") : undefined}
-            >
-              {t("modal.saveButton")}
-            </Button>
-          </Form.Submit>
+          {(!isPlatform || !isReadOnly) && (
+            <Form.Submit asChild>
+              <Button
+                variant="default"
+                size="sm"
+                data-testid="save-flow-settings"
+                loading={isSaving}
+                disabled={disableSave || isReadOnly}
+                title={isReadOnly ? t("version.readOnly") : undefined}
+              >
+                {t("modal.saveButton")}
+              </Button>
+            </Form.Submit>
+          )}
         </div>
       </div>
     </Form.Root>

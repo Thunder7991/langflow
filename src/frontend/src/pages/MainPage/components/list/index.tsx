@@ -18,6 +18,7 @@ import DeleteConfirmationModal from "@/modals/deleteConfirmationModal";
 import ExportModal from "@/modals/exportModal";
 import FlowSettingsModal from "@/modals/flowSettingsModal";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
 import type { FlowType } from "@/types/flow";
 import { downloadFlow } from "@/utils/reactflowUtils";
 import { swatchColors } from "@/utils/styleUtils";
@@ -80,7 +81,10 @@ const ListComponent = ({
 
   const { can } = usePermissions();
   // Moving a flow into another folder mutates its folder_id → gate on write.
-  const canMove = can(flowData.id, "write");
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const canMove =
+    can(flowData.id, "write") && (actions == null || actions.includes("move"));
+  const showOptions = actions == null || can(flowData.id, "write");
 
   const { onDragStart } = useDragStart(flowData);
 
@@ -208,37 +212,39 @@ const ListComponent = ({
         </div>
 
         <div className="pointer-events-none relative z-10 ml-5 flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="iconMd"
-                data-testid="home-dropdown-menu"
-                className="pointer-events-auto group"
-                aria-label={t("flows.moreOptions", { name: flowData.name })}
+          {showOptions && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="iconMd"
+                  data-testid="home-dropdown-menu"
+                  className="pointer-events-auto group"
+                  aria-label={t("flows.moreOptions", { name: flowData.name })}
+                >
+                  <ForwardedIconComponent
+                    name="Ellipsis"
+                    aria-hidden="true"
+                    className="h-5 w-5 text-muted-foreground group-hover:text-foreground"
+                  />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-[185px]"
+                sideOffset={5}
+                side="bottom"
               >
-                <ForwardedIconComponent
-                  name="Ellipsis"
-                  aria-hidden="true"
-                  className="h-5 w-5 text-muted-foreground group-hover:text-foreground"
+                <DropdownComponent
+                  flowData={flowData}
+                  setOpenDelete={setOpenDelete}
+                  handleExport={handleExport}
+                  handleEdit={() => {
+                    setOpenSettings(true);
+                  }}
                 />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-[185px]"
-              sideOffset={5}
-              side="bottom"
-            >
-              <DropdownComponent
-                flowData={flowData}
-                setOpenDelete={setOpenDelete}
-                handleExport={handleExport}
-                handleEdit={() => {
-                  setOpenSettings(true);
-                }}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </Card>
       {openDelete && (

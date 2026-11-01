@@ -169,7 +169,19 @@ def _actions(identity: dict) -> list[str]:
         or not isinstance(actions, list)
         or not all(
             isinstance(a, str)
-            and a in {"read", "create", "update", "dry_run", "file_read", "file_upload", "file_download"}
+            and a
+            in {
+                "read",
+                "create",
+                "update",
+                "move",
+                "project_create",
+                "version_read",
+                "dry_run",
+                "file_read",
+                "file_upload",
+                "file_download",
+            }
             for a in actions
         )
         or "read" not in actions
@@ -423,6 +435,10 @@ class PlatformSsoMiddleware:
                 path,
             )
             action = None
+            if method in {"GET", "HEAD"} and re.fullmatch(
+                r"/api/v1/flows/[0-9a-fA-F-]{36}/versions(?:/[0-9a-fA-F-]{36})?/?", path
+            ):
+                action = "version_read"
             if method == "POST" and re.fullmatch(r"/api/v2/platform-flows/[0-9a-fA-F-]{36}/dry-run", path):
                 action = "dry_run"
             if method == "GET" and path == "/api/v2/platform-models":
@@ -437,7 +453,7 @@ class PlatformSsoMiddleware:
                 elif method == "POST" and path == "/api/v2/platform-files":
                     action = "file_upload"
             if method == "POST" and path.rstrip("/") in {"/api/v1/flows", "/api/v1/projects"}:
-                action = "create"
+                action = "project_create" if path.rstrip("/") == "/api/v1/projects" else "create"
             elif method == "PATCH" and re.fullmatch(r"/api/v1/flows/[0-9a-fA-F-]{36}", path):
                 action = "update"
             elif method == "POST" and path == "/api/v1/authz/me/permissions":

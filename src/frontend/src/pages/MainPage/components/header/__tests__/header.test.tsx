@@ -185,15 +185,15 @@ describe("HeaderComponent - TabIndex Behavior with Bulk Actions", () => {
     });
   });
 
-  it("disables export/delete and removes non-flow tabs even for a platform editor", () => {
+  it("hides export/delete and removes non-flow tabs even for a platform editor", () => {
     act(() =>
       useAuthStore.setState({
         platformWorkflowActions: ["read", "create", "update"],
       }),
     );
     render(<HeaderComponent {...defaultProps} selectedFlows={["flow1"]} />);
-    expect(screen.getByTestId("download-bulk-btn")).toBeDisabled();
-    expect(screen.getByTestId("delete-bulk-btn")).toBeDisabled();
+    expect(screen.queryByTestId("download-bulk-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("delete-bulk-btn")).not.toBeInTheDocument();
     expect(screen.queryByTestId("components-btn")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mcp-btn")).not.toBeInTheDocument();
     expect(screen.getByTestId("new-project-btn")).toBeEnabled();

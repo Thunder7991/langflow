@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { SidebarSection } from "@/components/ui/sidebar";
 import enTranslations from "@/locales/en.json";
+import useAuthStore from "@/stores/authStore";
 import SidebarSegmentedNav, { NAV_ITEMS } from "../sidebarSegmentedNav";
 
 const mockNavigate = jest.fn();
@@ -134,7 +135,25 @@ describe("SidebarSegmentedNav", () => {
   });
 
   afterEach(() => {
+    useAuthStore.setState({ platformWorkflowActions: null });
     jest.useRealTimers();
+  });
+
+  it("hides history without version_read and leaves the component catalog visible", () => {
+    useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
+    mockUseSidebar.activeSection = "versions";
+    render(<SidebarSegmentedNav />);
+    expect(
+      screen.queryByTestId("sidebar-nav-versions"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-nav-components")).toBeInTheDocument();
+    expect(mockUseSidebar.setActiveSection).toHaveBeenCalledWith("components");
+    act(() =>
+      useAuthStore.setState({
+        platformWorkflowActions: ["read", "version_read"],
+      }),
+    );
+    expect(screen.getByTestId("sidebar-nav-versions")).toBeInTheDocument();
   });
 
   it("renders all navigation items", () => {

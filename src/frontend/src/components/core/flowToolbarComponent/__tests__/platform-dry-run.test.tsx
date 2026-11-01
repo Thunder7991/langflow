@@ -75,7 +75,9 @@ it("runs the saved version with no posted graph and renders escaped output", asy
 it("does not derive run permission from editing and prevents unsaved graph execution", async () => {
   useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
   const view = render(<PlaygroundButton hasIO />);
-  expect(screen.getByRole("button", { name: "纯文本调试" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "纯文本调试" }),
+  ).not.toBeInTheDocument();
   act(() =>
     useAuthStore.setState({ platformWorkflowActions: ["read", "dry_run"] }),
   );
@@ -139,7 +141,9 @@ it("shows a failed response without a fabricated success or clearing the saved c
 it("requires a known owner and read access even when dry_run is present", () => {
   useAuthStore.setState({ platformWorkflowActions: ["dry_run"] });
   const view = render(<PlaygroundButton hasIO />);
-  expect(screen.getByRole("button", { name: "纯文本调试" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "纯文本调试" }),
+  ).not.toBeInTheDocument();
   act(() => {
     useAuthStore.setState({
       userData: null,

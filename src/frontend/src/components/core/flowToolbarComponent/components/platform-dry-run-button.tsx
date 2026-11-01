@@ -157,15 +157,17 @@ export default function PlatformDryRunButton() {
 
   return (
     <>
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={!canRun || !sameFlow || !version}
-        title={!canRun ? "需要工作流调试权限" : "运行已保存的受控流程"}
-        onClick={() => handleOpen(true)}
-      >
-        {label}
-      </Button>
+      {canRun && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canRun || !sameFlow || !version}
+          title={!canRun ? "需要工作流调试权限" : "运行已保存的受控流程"}
+          onClick={() => handleOpen(true)}
+        >
+          {label}
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={handleOpen}>
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
@@ -183,12 +185,14 @@ export default function PlatformDryRunButton() {
           {!canRun && (
             <p role="status">当前没有工作流调试权限，画布内容已保留。</p>
           )}
-          <Button
-            disabled={!canRun || !sameFlow || !version || dirty || busy}
-            onClick={runSaved}
-          >
-            运行已保存版本
-          </Button>
+          {canRun && (
+            <Button
+              disabled={!sameFlow || !version || dirty || busy}
+              onClick={runSaved}
+            >
+              运行已保存版本
+            </Button>
+          )}
           {busy && (
             <p role="status">
               正在运行…关闭窗口仅停止等待，不表示服务端任务已经停止。

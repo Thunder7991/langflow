@@ -263,7 +263,8 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   function addNewFolder() {
-    if (platformActions != null && !platformActions.includes("create")) return;
+    if (platformActions != null && !platformActions.includes("project_create"))
+      return;
     mutateAddFolder(
       {
         data: {
@@ -639,21 +640,25 @@ const SideBarFoldersButtonsComponent = ({
                   {t("sidebar.knowledge")}
                 </SidebarMenuButton>
               )}
-              <SidebarMenuButton
-                onClick={handleFilesNavigation}
-                disabled={isPlatform && !platformActions.includes("file_read")}
-                title={
-                  isPlatform && !platformActions.includes("file_read")
-                    ? "需要平台个人文件读取权限"
-                    : undefined
-                }
-                data-testid="my-files-button"
-                size="md"
-                className={cn("text-sm", projectSidebar.footerItemClassName)}
-              >
-                <ForwardedIconComponent name="File" className="h-4 w-4" />
-                {t("sidebar.myFiles")}
-              </SidebarMenuButton>
+              {(!isPlatform || platformActions.includes("file_read")) && (
+                <SidebarMenuButton
+                  onClick={handleFilesNavigation}
+                  disabled={
+                    isPlatform && !platformActions.includes("file_read")
+                  }
+                  title={
+                    isPlatform && !platformActions.includes("file_read")
+                      ? "需要平台个人文件读取权限"
+                      : undefined
+                  }
+                  data-testid="my-files-button"
+                  size="md"
+                  className={cn("text-sm", projectSidebar.footerItemClassName)}
+                >
+                  <ForwardedIconComponent name="File" className="h-4 w-4" />
+                  {t("sidebar.myFiles")}
+                </SidebarMenuButton>
+              )}
             </>
           )}
           <SidebarAccountActions

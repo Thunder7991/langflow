@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
+import useAuthStore from "@/stores/authStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import useVersionPreviewStore from "@/stores/versionPreviewStore";
 import { CanvasBadge } from "./CanvasBanner";
@@ -8,6 +9,9 @@ import SaveSnapshotButton from "./SaveSnapshotButton";
 
 export default function VersionPreviewOverlay() {
   const previewLabel = useVersionPreviewStore((s) => s.previewLabel);
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const previewId = useVersionPreviewStore((s) => s.previewId);
   const previewDescription = useVersionPreviewStore(
     (s) => s.previewDescription,
@@ -54,17 +58,20 @@ export default function VersionPreviewOverlay() {
         </div>
       )}
 
-      {previewLabel === "Current Draft" && (
+      {!isPlatform && previewLabel === "Current Draft" && (
         <SaveSnapshotButton flowId={currentFlowId} />
       )}
 
-      {previewId && previewLabel && previewLabel !== "Current Draft" && (
-        <RestoreVersionButton
-          flowId={currentFlowId}
-          versionId={previewId}
-          versionTag={previewLabel}
-        />
-      )}
+      {!isPlatform &&
+        previewId &&
+        previewLabel &&
+        previewLabel !== "Current Draft" && (
+          <RestoreVersionButton
+            flowId={currentFlowId}
+            versionId={previewId}
+            versionTag={previewLabel}
+          />
+        )}
     </div>
   );
 }

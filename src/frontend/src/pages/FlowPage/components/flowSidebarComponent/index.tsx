@@ -79,6 +79,11 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
   const isPlatform = useAuthStore(
     (state) => state.platformWorkflowActions != null,
   );
+  const canReadVersions = useAuthStore(
+    (state) =>
+      state.platformWorkflowActions == null ||
+      state.platformWorkflowActions.includes("version_read"),
+  );
   const rawData = useTypesStore((state) => state.data);
   const catalogGovernanceEnabled = useUtilityStore(
     (state) => state.catalogGovernanceEnabled,
@@ -389,7 +394,10 @@ export function FlowSidebarComponent({ isLoading }: FlowSidebarComponentProps) {
     hasBundleItems,
   });
   const showVersions =
-    ENABLE_NEW_SIDEBAR && activeSection === "versions" && sidebarOpen;
+    ENABLE_NEW_SIDEBAR &&
+    activeSection === "versions" &&
+    sidebarOpen &&
+    canReadVersions;
 
   const currentFlowForVersions = useFlowStore((state) => state.currentFlow);
 

@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { usePermissions } from "@/contexts/permissionsContext";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import DeploymentStepperModal from "@/pages/MainPage/pages/deploymentsPage/components/deployment-stepper-modal";
 import { useNavigateToTest } from "@/pages/MainPage/pages/deploymentsPage/hooks/use-navigate-to-test";
 import useAuthStore from "@/stores/authStore";
@@ -98,18 +97,6 @@ export default function DeployButton() {
     (s) => s.featureFlags.wxo_deployments === true,
   );
   if (!deploymentsEnabled) return null;
-  if (isPlatform)
-    return (
-      <span title={PLATFORM_UNAVAILABLE_REASON}>
-        <button
-          type="button"
-          disabled
-          data-testid="deploy-btn-flow"
-          className="px-2 text-muted-foreground"
-        >
-          部署（暂未开放）
-        </button>
-      </span>
-    );
+  if (isPlatform) return null;
   return <DeployButtonInner />;
 }

@@ -440,7 +440,7 @@ async def create_project(
 ):
     from langflow.services.auth.platform_workflows import require_action
 
-    personal_only = require_action(request, "create")
+    personal_only = require_action(request, "project_create")
     if personal_only and (project.auth_settings or project.flows_list or project.components_list):
         raise HTTPException(403, "Only empty personal projects can be created")
     await audited_permission(

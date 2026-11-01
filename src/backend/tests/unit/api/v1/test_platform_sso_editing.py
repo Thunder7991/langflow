@@ -156,7 +156,8 @@ async def test_create_rejects_identity_and_exposure_fields_without_rows(editor, 
 
 
 async def test_foreign_project_rejected_instead_of_falling_back(editor):
-    client, actor, _ = editor
+    client, actor, live = editor
+    live["actions"].append("move")
     from langflow.services.database.models.user.model import User
 
     async with session_scope() as session:
@@ -197,7 +198,8 @@ async def test_unsupported_side_effects_stay_blocked_and_ui_permissions_match(ed
 
 
 async def test_initial_project_create_does_not_register_mcp(editor, monkeypatch):
-    client, actor, _ = editor
+    client, actor, live = editor
+    live["actions"] = ["read", "project_create"]
     from langflow.services.database.models.mcp_server.model import MCPServer
     from langflow.services.deps import get_settings_service
 
@@ -270,7 +272,8 @@ async def test_create_persists_trusted_code_in_the_handler_body(editor, monkeypa
     [{"auth_settings": {"auth_type": "apikey"}}, {"flows_list": [str(uuid4())]}, {"components_list": [str(uuid4())]}],
 )
 async def test_project_side_effect_payloads_are_rejected(editor, fields):
-    client, _, _ = editor
+    client, _, live = editor
+    live["actions"] = ["read", "project_create"]
     name = f"rejected-project-{uuid4().hex}"
     response = await client.post("/api/v1/projects/", json={"name": name, **fields})
     assert response.status_code == 403
@@ -366,7 +369,7 @@ async def test_independent_actions_match_api_and_resource_permissions(
     created = await client.post("/api/v1/flows/", json={"name": "action-matrix", "data": GRAPH})
     assert created.status_code == create_status, created.text
     project = await client.post("/api/v1/projects/", json={"name": f"matrix-{uuid4().hex}"})
-    assert project.status_code == create_status, project.text
+    assert project.status_code == 403, project.text
     edited_graph = {**GRAPH, "viewport": {"x": 42, "y": 17, "zoom": 0.7}}
     saved = await client.patch(
         f"/api/v1/flows/{flow['id']}",

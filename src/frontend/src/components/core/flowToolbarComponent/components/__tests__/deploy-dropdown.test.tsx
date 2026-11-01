@@ -182,7 +182,7 @@ describe("PublishDropdown", () => {
   it("disables sharing and never mounts API, export or publish controls in platform mode", () => {
     mockPlatformActions = ["read", "create", "update"];
     render(<PublishDropdown openApiModal={true} setOpenApiModal={() => {}} />);
-    expect(screen.getByTestId("publish-button")).toBeDisabled();
+    expect(screen.queryByTestId("publish-button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("publish-switch")).not.toBeInTheDocument();
     expect(screen.queryByTestId("api-access-item")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mcp-server-item")).not.toBeInTheDocument();

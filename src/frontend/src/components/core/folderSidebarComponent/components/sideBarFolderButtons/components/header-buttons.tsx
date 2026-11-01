@@ -4,7 +4,6 @@ import IconComponent from "@/components/common/genericIconComponent";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useUpdateUser } from "@/controllers/API/queries/auth";
 import CustomGetStartedProgress from "@/customization/components/custom-get-started-progress";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { cn } from "@/utils/utils";
@@ -35,7 +34,7 @@ export const HeaderButtons = ({
     (state) => state.platformWorkflowActions,
   );
   const canCreateProject =
-    platformActions == null || platformActions.includes("create");
+    platformActions == null || platformActions.includes("project_create");
   const hideGettingStartedProgress = useUtilityStore(
     (state) => state.hideGettingStartedProgress,
   );
@@ -107,15 +106,13 @@ export const HeaderButtons = ({
           {t("sidebar.projects")}
         </div>
         <div className="flex items-center gap-1">
-          <UploadFolderButton
-            onClick={handleUploadFlowsToFolder}
-            // B2 仅开放空个人项目, 流程导入尚未开放。
-            disabled={isUpdatingFolder || platformActions != null}
-            reason={
-              platformActions != null ? PLATFORM_UNAVAILABLE_REASON : undefined
-            }
-          />
-          {!hideNewProjectButton && (
+          {platformActions == null && (
+            <UploadFolderButton
+              onClick={handleUploadFlowsToFolder}
+              disabled={isUpdatingFolder}
+            />
+          )}
+          {!hideNewProjectButton && canCreateProject && (
             <AddFolderButton
               onClick={addNewFolder}
               disabled={isUpdatingFolder || !canCreateProject}

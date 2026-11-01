@@ -33,8 +33,12 @@ it("keeps platform conflict overwrite and fork unavailable while retaining safe 
         onOverwrite={jest.fn()}
       />,
     );
-    expect(screen.getByTestId("confirm-duplicate-flow")).toBeDisabled();
-    expect(screen.getByTestId("confirm-overwrite-flow")).toBeDisabled();
+    expect(
+      screen.queryByTestId("confirm-duplicate-flow"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("confirm-overwrite-flow"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("dialog-load-latest-button")).toBeEnabled();
   } finally {
     useAuthStore.setState({ platformWorkflowActions: null });

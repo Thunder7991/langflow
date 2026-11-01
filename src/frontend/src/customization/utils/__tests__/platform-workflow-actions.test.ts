@@ -24,6 +24,17 @@ it("keeps explicit file capabilities without deriving them from flow update", ()
 
 afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
 
+it("keeps project and history capabilities independent while ignoring reserved operations", () => {
+  syncPlatformWorkflowActions(
+    "read,project_create,version_read,run,stop,publish,project_delete",
+  );
+  expect(useAuthStore.getState().platformWorkflowActions).toEqual([
+    "read",
+    "project_create",
+    "version_read",
+  ]);
+});
+
 it("takes the latest server capability and closes editing on an empty failure header", () => {
   syncPlatformWorkflowActions("read,create,update");
   expect(useAuthStore.getState().platformWorkflowActions).toEqual([

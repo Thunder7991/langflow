@@ -57,10 +57,13 @@ it("shows independent read/upload/download capabilities and escaped text preview
   useAuthStore.setState({ platformWorkflowActions: ["read", "file_read"] });
   await waitFor(() =>
     expect(
-      screen.getByRole("button", { name: "下载 资料.txt" }),
-    ).toBeDisabled(),
+      screen.queryByRole("button", { name: "下载 资料.txt" }),
+    ).not.toBeInTheDocument(),
   );
-  expect(screen.getByLabelText("选择文件")).toBeDisabled();
+  expect(screen.queryByLabelText("选择文件")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "上传" }),
+  ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /删除|重命名/ }),
   ).not.toBeInTheDocument();

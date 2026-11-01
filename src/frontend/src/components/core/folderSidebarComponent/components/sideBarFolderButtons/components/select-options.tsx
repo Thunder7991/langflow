@@ -51,6 +51,8 @@ export const SelectOptions = ({
       handleSelectFolderToRename,
     );
   };
+  // 平台尚未开放项目改名、导出、删除；不留下没有可用菜单项的更多按钮。
+  if (isPlatform && !canRename && !canDownload && !canDelete) return null;
   return (
     // A menu of commands, not a value to pick: Knowledge Bases, Files and
     // Deployments all use DropdownMenu here, and Share is a menu item on each.

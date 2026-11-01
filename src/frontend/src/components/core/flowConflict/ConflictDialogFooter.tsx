@@ -126,37 +126,41 @@ export function ConflictDialogFooter({
             <ForwardedIconComponent name="RefreshCw" aria-hidden="true" />
             {t("multiEdit.dialog.loadLatest")}
           </Button>
-          <Button
-            variant="conflictSecondary"
-            size="dialogAction"
-            onClick={onDuplicate}
-            disabled={isPending || platformEditing}
-            data-testid="confirm-duplicate-flow"
-          >
-            <ForwardedIconComponent name="GitBranch" aria-hidden="true" />
-            {isForking
-              ? t("multiEdit.dialog.duplicating")
-              : t("multiEdit.dialog.confirm")}
-          </Button>
-          <Button
-            variant="conflictPrimary"
-            size="dialogAction"
-            onClick={onOverwrite}
-            disabled={isPending || blocked || platformEditing}
-            // Named rather than left to the reader to infer from a dead button.
-            title={
-              blocked
-                ? t("multiEdit.dialog.resolveFirst", {
-                    count: unresolvedConflicts,
-                  })
-                : undefined
-            }
-            data-testid="confirm-overwrite-flow"
-          >
-            {isOverwriting
-              ? t("multiEdit.dialog.overwriting")
-              : t("multiEdit.dialog.overwrite")}
-          </Button>
+          {!platformEditing && (
+            <Button
+              variant="conflictSecondary"
+              size="dialogAction"
+              onClick={onDuplicate}
+              disabled={isPending || platformEditing}
+              data-testid="confirm-duplicate-flow"
+            >
+              <ForwardedIconComponent name="GitBranch" aria-hidden="true" />
+              {isForking
+                ? t("multiEdit.dialog.duplicating")
+                : t("multiEdit.dialog.confirm")}
+            </Button>
+          )}
+          {!platformEditing && (
+            <Button
+              variant="conflictPrimary"
+              size="dialogAction"
+              onClick={onOverwrite}
+              disabled={isPending || blocked || platformEditing}
+              // Named rather than left to the reader to infer from a dead button.
+              title={
+                blocked
+                  ? t("multiEdit.dialog.resolveFirst", {
+                      count: unresolvedConflicts,
+                    })
+                  : undefined
+              }
+              data-testid="confirm-overwrite-flow"
+            >
+              {isOverwriting
+                ? t("multiEdit.dialog.overwriting")
+                : t("multiEdit.dialog.overwrite")}
+            </Button>
+          )}
         </div>
       </div>
     </div>

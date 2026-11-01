@@ -225,8 +225,7 @@ describe("project creation errors", () => {
     const view = render(
       <SideBarFoldersButtonsComponent handleChangeFolder={jest.fn()} />,
     );
-    expect(screen.getByTestId("my-files-button")).toBeDisabled();
-    fireEvent.click(screen.getByTestId("my-files-button"));
+    expect(screen.queryByTestId("my-files-button")).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
     mockPlatformActions = ["read", "file_read"];
     view.rerender(

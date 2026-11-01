@@ -66,56 +66,62 @@ const DropdownComponent = ({
 
   return (
     <>
-      <DropdownMenuItem
-        disabled={!canEdit}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleSelectOptionsChange("edit");
-        }}
-        className="cursor-pointer"
-        data-testid="btn-edit-flow"
-      >
-        <ForwardedIconComponent
-          name="SquarePen"
-          aria-hidden="true"
-          className="mr-2 h-4 w-4"
-        />
-        {t("flow.menu.editDetails")}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        disabled={!canExport}
-        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleSelectOptionsChange("export");
-        }}
-        className="cursor-pointer"
-        data-testid="btn-download-json"
-      >
-        <ForwardedIconComponent
-          name="Download"
-          aria-hidden="true"
-          className="mr-2 h-4 w-4"
-        />
-        {t("flow.menu.export")}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        disabled={!canDuplicate}
-        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleSelectOptionsChange("duplicate");
-        }}
-        className="cursor-pointer"
-        data-testid="btn-duplicate-flow"
-      >
-        <ForwardedIconComponent
-          name="CopyPlus"
-          aria-hidden="true"
-          className="mr-2 h-4 w-4"
-        />
-        {t("flow.menu.duplicate")}
-      </DropdownMenuItem>
+      {(!isPlatform || canEdit) && (
+        <DropdownMenuItem
+          disabled={!canEdit}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSelectOptionsChange("edit");
+          }}
+          className="cursor-pointer"
+          data-testid="btn-edit-flow"
+        >
+          <ForwardedIconComponent
+            name="SquarePen"
+            aria-hidden="true"
+            className="mr-2 h-4 w-4"
+          />
+          {t("flow.menu.editDetails")}
+        </DropdownMenuItem>
+      )}
+      {(!isPlatform || canExport) && (
+        <DropdownMenuItem
+          disabled={!canExport}
+          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSelectOptionsChange("export");
+          }}
+          className="cursor-pointer"
+          data-testid="btn-download-json"
+        >
+          <ForwardedIconComponent
+            name="Download"
+            aria-hidden="true"
+            className="mr-2 h-4 w-4"
+          />
+          {t("flow.menu.export")}
+        </DropdownMenuItem>
+      )}
+      {(!isPlatform || canDuplicate) && (
+        <DropdownMenuItem
+          disabled={!canDuplicate}
+          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSelectOptionsChange("duplicate");
+          }}
+          className="cursor-pointer"
+          data-testid="btn-duplicate-flow"
+        >
+          <ForwardedIconComponent
+            name="CopyPlus"
+            aria-hidden="true"
+            className="mr-2 h-4 w-4"
+          />
+          {t("flow.menu.duplicate")}
+        </DropdownMenuItem>
+      )}
       {!isPlatform && (
         <CustomFlowShareAction
           resourceId={flowData.id}
@@ -123,23 +129,25 @@ const DropdownComponent = ({
           resourceName={flowData.name}
         />
       )}
-      <DropdownMenuItem
-        disabled={!canDelete}
-        title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (canDelete) setOpenDelete(true);
-        }}
-        className="cursor-pointer text-destructive"
-        data-testid="btn_delete_dropdown_menu"
-      >
-        <ForwardedIconComponent
-          name="Trash2"
-          aria-hidden="true"
-          className="mr-2 h-4 w-4"
-        />
-        {t("flow.menu.delete")}
-      </DropdownMenuItem>
+      {(!isPlatform || canDelete) && (
+        <DropdownMenuItem
+          disabled={!canDelete}
+          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canDelete) setOpenDelete(true);
+          }}
+          className="cursor-pointer text-destructive"
+          data-testid="btn_delete_dropdown_menu"
+        >
+          <ForwardedIconComponent
+            name="Trash2"
+            aria-hidden="true"
+            className="mr-2 h-4 w-4"
+          />
+          {t("flow.menu.delete")}
+        </DropdownMenuItem>
+      )}
     </>
   );
 };

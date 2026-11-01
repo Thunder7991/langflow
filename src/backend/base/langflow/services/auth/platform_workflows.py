@@ -144,6 +144,9 @@ async def validate_update(request: Request, session: AsyncSession, payload, flow
         return
     if flow.user_id != user_id:
         raise HTTPException(404, "Flow not found")
+    # 移动仍走普通保存接口, 但必须独立授予移动权限; 目标项目归属沿用下方真实数据库检查。
+    if getattr(payload, "folder_id", None) is not None and payload.folder_id != flow.folder_id:
+        require_action(request, "move")
     # 不能借由普通保存把已暴露/受外部管理的流程转换成可编辑个人流程。
     validate_fields(flow, existing=True)
     validate_fields(payload)

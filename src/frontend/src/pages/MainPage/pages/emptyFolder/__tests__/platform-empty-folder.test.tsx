@@ -18,9 +18,11 @@ it.each([
     useAuthStore.setState({ platformWorkflowActions: actions });
     const create = jest.fn();
     render(<EmptyFolder setOpenModal={jest.fn()} onNewFlow={create} />);
-    const button = screen.getByTestId("new_project_btn_empty_page");
-    expect(button).toHaveProperty("disabled", !enabled);
-    fireEvent.click(button);
+    const button = screen.queryByTestId("new_project_btn_empty_page");
+    if (enabled) {
+      expect(button).toBeEnabled();
+      fireEvent.click(button!);
+    } else expect(button).not.toBeInTheDocument();
     expect(create).toHaveBeenCalledTimes(enabled ? 1 : 0);
   },
 );

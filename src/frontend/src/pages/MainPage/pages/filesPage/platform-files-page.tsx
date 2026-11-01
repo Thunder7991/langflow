@@ -159,29 +159,33 @@ export default function PlatformFilesPage() {
         <p role="alert">{extractApiErrorMessages(policy.error).join("；")}</p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm">
-          选择文件
-          <input
-            ref={input}
-            aria-label="选择文件"
-            type="file"
-            className="ml-2 max-w-full"
-            accept={policy.data?.extensions.join(",")}
-            disabled={!canUpload || !!busy || !policy.data}
-            onChange={(event) => {
-              setSelected(event.target.files?.[0] ?? null);
-              setMessage("");
-              setError("");
-            }}
-          />
-        </label>
-        <Button
-          size="sm"
-          disabled={!canUpload || !selected || !!busy || !policy.data}
-          onClick={handleUpload}
-        >
-          上传
-        </Button>
+        {canUpload && (
+          <>
+            <label className="text-sm">
+              选择文件
+              <input
+                ref={input}
+                aria-label="选择文件"
+                type="file"
+                className="ml-2 max-w-full"
+                accept={policy.data?.extensions.join(",")}
+                disabled={!canUpload || !!busy || !policy.data}
+                onChange={(event) => {
+                  setSelected(event.target.files?.[0] ?? null);
+                  setMessage("");
+                  setError("");
+                }}
+              />
+            </label>
+            <Button
+              size="sm"
+              disabled={!canUpload || !selected || !!busy || !policy.data}
+              onClick={handleUpload}
+            >
+              上传
+            </Button>
+          </>
+        )}
         {busy === "upload" && (
           <>
             <span role="status">
@@ -251,15 +255,17 @@ export default function PlatformFilesPage() {
                 >
                   预览
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label={`下载 ${file.name}`}
-                  disabled={!canDownload || !!busy}
-                  onClick={() => handleRead(file, false)}
-                >
-                  下载
-                </Button>
+                {canDownload && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`下载 ${file.name}`}
+                    disabled={!canDownload || !!busy}
+                    onClick={() => handleRead(file, false)}
+                  >
+                    下载
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

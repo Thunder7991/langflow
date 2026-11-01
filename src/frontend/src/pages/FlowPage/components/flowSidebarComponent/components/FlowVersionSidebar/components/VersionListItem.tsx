@@ -66,60 +66,62 @@ export default function VersionListItem({
           </span>
         </div>
         <div className="flex items-center">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                onClick={(e) => e.stopPropagation()}
-                className="group/trigger flex h-6 w-6 items-center justify-center rounded"
-                title={t("flow.moreOptions")}
-              >
-                {isSelected ? (
-                  <>
-                    <span className="block h-2 w-2 rounded-full bg-[#6366F1] group-hover/trigger:hidden" />
+          {!isPlatform && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => e.stopPropagation()}
+                  className="group/trigger flex h-6 w-6 items-center justify-center rounded"
+                  title={t("flow.moreOptions")}
+                >
+                  {isSelected ? (
+                    <>
+                      <span className="block h-2 w-2 rounded-full bg-[#6366F1] group-hover/trigger:hidden" />
+                      <ForwardedIconComponent
+                        name="EllipsisVertical"
+                        className="hidden h-3.5 w-3.5 text-muted-foreground group-hover/trigger:block"
+                      />
+                    </>
+                  ) : (
                     <ForwardedIconComponent
                       name="EllipsisVertical"
-                      className="hidden h-3.5 w-3.5 text-muted-foreground group-hover/trigger:block"
+                      className="h-3.5 w-3.5 text-muted-foreground group-hover/histitem:text-primary"
                     />
-                  </>
-                ) : (
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="start" className="w-40">
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!isPlatform) onExport(entry);
+                  }}
+                  disabled={isPlatform}
+                  title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                  className="cursor-pointer"
+                >
                   <ForwardedIconComponent
-                    name="EllipsisVertical"
-                    className="h-3.5 w-3.5 text-muted-foreground group-hover/histitem:text-primary"
+                    name="Download"
+                    className="mr-2 h-3.5 w-3.5"
                   />
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="start" className="w-40">
-              <DropdownMenuItem
-                onClick={() => {
-                  if (!isPlatform) onExport(entry);
-                }}
-                disabled={isPlatform}
-                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-                className="cursor-pointer"
-              >
-                <ForwardedIconComponent
-                  name="Download"
-                  className="mr-2 h-3.5 w-3.5"
-                />
-                {t("flow.menu.export")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  if (!isPlatform) onDeleteClick(entry);
-                }}
-                disabled={isPlatform}
-                title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-                className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
-              >
-                <ForwardedIconComponent
-                  name="Trash2"
-                  className="mr-2 h-3.5 w-3.5"
-                />
-                {t("flow.menu.delete")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  {t("flow.menu.export")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (!isPlatform) onDeleteClick(entry);
+                  }}
+                  disabled={isPlatform}
+                  title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                  className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <ForwardedIconComponent
+                    name="Trash2"
+                    className="mr-2 h-3.5 w-3.5"
+                  />
+                  {t("flow.menu.delete")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </SidebarMenuButton>
     </SidebarMenuItem>

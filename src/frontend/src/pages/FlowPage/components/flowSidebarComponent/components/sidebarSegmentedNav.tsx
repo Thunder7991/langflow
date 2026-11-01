@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import ShadTooltip from "@/components/common/shadTooltipComponent";
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 // 临时查看左侧各菜单，保留平台禁用逻辑以便恢复。
 // import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
-// import useAuthStore from "@/stores/authStore";
+import useAuthStore from "@/stores/authStore";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { cn } from "@/utils/utils";
 import { useSearchContext } from "../index";
@@ -37,6 +37,8 @@ const SidebarSegmentedNav = ({
   hiddenFromTabOrder = false,
 }: SidebarSegmentedNavProps) => {
   const { t } = useTranslation();
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const canReadVersions = actions == null || actions.includes("version_read");
   // const isPlatform = useAuthStore(
   //   (state) => state.platformWorkflowActions != null,
   // );
@@ -47,7 +49,13 @@ const SidebarSegmentedNav = ({
     (state) => state.setIsFullscreen,
   );
   // The Agent tab is always available; it handles eligibility inside the tab.
-  const items = NAV_ITEMS;
+  const items = NAV_ITEMS.filter(
+    (item) => item.id !== "versions" || canReadVersions,
+  );
+  useEffect(() => {
+    if (!canReadVersions && activeSection === "versions")
+      setActiveSection("components");
+  }, [canReadVersions, activeSection, setActiveSection]);
   const firstFeatureIndex = items.findIndex((item) =>
     FEATURE_SECTION_IDS.has(item.id),
   );

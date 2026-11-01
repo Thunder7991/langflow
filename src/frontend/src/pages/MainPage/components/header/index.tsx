@@ -294,48 +294,56 @@ const HeaderComponent = ({
                     selectedFlows.length > 0 && "w-36 opacity-100",
                   )}
                 >
-                  <Button
-                    variant="outline"
-                    size="iconMd"
-                    className="h-8 w-8"
-                    data-testid="download-bulk-btn"
-                    onClick={handleDownload}
-                    loading={isDownloading}
-                    disabled={!canBulkDownload}
-                    title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
-                    tabIndex={hasSelection && canBulkDownload ? 0 : -1}
-                    aria-label={t("flows.downloadSelected")}
-                  >
-                    <ForwardedIconComponent name="Download" />
-                  </Button>
-                  <DeleteConfirmationModal
-                    asChild
-                    onConfirm={handleDelete}
-                    description={"flow" + (selectedFlows.length > 1 ? "s" : "")}
-                    note={
-                      "and " +
-                      (selectedFlows.length > 1 ? "their" : "its") +
-                      " message history"
-                    }
-                  >
+                  {(!isPlatform || canBulkDownload) && (
                     <Button
-                      variant="destructive"
+                      variant="outline"
                       size="iconMd"
-                      className="px-2.5 !text-mmd"
-                      data-testid="delete-bulk-btn"
-                      loading={isDeleting}
-                      disabled={!canBulkDelete}
+                      className="h-8 w-8"
+                      data-testid="download-bulk-btn"
+                      onClick={handleDownload}
+                      loading={isDownloading}
+                      disabled={!canBulkDownload}
                       title={
                         isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined
                       }
-                      tabIndex={hasSelection && canBulkDelete ? 0 : -1}
+                      tabIndex={hasSelection && canBulkDownload ? 0 : -1}
+                      aria-label={t("flows.downloadSelected")}
                     >
-                      <ForwardedIconComponent name="Trash2" />
-                      {t("mainPage.delete")}
+                      <ForwardedIconComponent name="Download" />
                     </Button>
-                  </DeleteConfirmationModal>
+                  )}
+                  {(!isPlatform || canBulkDelete) && (
+                    <DeleteConfirmationModal
+                      asChild
+                      onConfirm={handleDelete}
+                      description={
+                        "flow" + (selectedFlows.length > 1 ? "s" : "")
+                      }
+                      note={
+                        "and " +
+                        (selectedFlows.length > 1 ? "their" : "its") +
+                        " message history"
+                      }
+                    >
+                      <Button
+                        variant="destructive"
+                        size="iconMd"
+                        className="px-2.5 !text-mmd"
+                        data-testid="delete-bulk-btn"
+                        loading={isDeleting}
+                        disabled={!canBulkDelete}
+                        title={
+                          isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined
+                        }
+                        tabIndex={hasSelection && canBulkDelete ? 0 : -1}
+                      >
+                        <ForwardedIconComponent name="Trash2" />
+                        {t("mainPage.delete")}
+                      </Button>
+                    </DeleteConfirmationModal>
+                  )}
                 </div>
-                {!hideNewFlowButton && (
+                {!hideNewFlowButton && (!isPlatform || can(null, "create")) && (
                   <ShadTooltip content={t("mainPage.newFlow")} side="bottom">
                     <Button
                       variant="default"

@@ -20,9 +20,10 @@ afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
 
 it.each([
   { actions: ["read"], create: false, upload: false },
-  { actions: ["read", "create"], create: true, upload: false },
+  { actions: ["read", "create"], create: false, upload: false },
+  { actions: ["read", "project_create"], create: true, upload: false },
   { actions: ["read", "update"], create: false, upload: false },
-  { actions: ["read", "create", "update"], create: true, upload: false },
+  { actions: ["read", "create", "update"], create: false, upload: false },
   { actions: null, create: true, upload: true },
 ])(
   "gates project creation and import for $actions",
@@ -39,12 +40,12 @@ it.each([
         isUpdatingFolder={false}
       />,
     );
-    const createButton = screen.getByTestId("add-project-button");
-    const uploadButton = screen.getByTestId("upload-project-button");
-    expect(createButton).toHaveProperty("disabled", !create);
-    expect(uploadButton).toHaveProperty("disabled", !upload);
-    fireEvent.click(createButton);
-    fireEvent.click(uploadButton);
+    const createButton = screen.queryByTestId("add-project-button");
+    const uploadButton = screen.queryByTestId("upload-project-button");
+    if (create) fireEvent.click(createButton!);
+    else expect(createButton).not.toBeInTheDocument();
+    if (upload) fireEvent.click(uploadButton!);
+    else expect(uploadButton).not.toBeInTheDocument();
     expect(add).toHaveBeenCalledTimes(create ? 1 : 0);
     expect(importFlow).toHaveBeenCalledTimes(upload ? 1 : 0);
   },

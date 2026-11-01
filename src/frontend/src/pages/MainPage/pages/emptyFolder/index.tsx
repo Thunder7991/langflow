@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/contexts/permissionsContext";
+import useAuthStore from "@/stores/authStore";
 import { useFolderStore } from "@/stores/foldersStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 
@@ -17,6 +18,9 @@ export const EmptyFolder = ({ setOpenModal, onNewFlow }: EmptyFolderProps) => {
   const { t } = useTranslation();
   const { can } = usePermissions();
   const canCreate = can(null, "create");
+  const isPlatform = useAuthStore(
+    (state) => state.platformWorkflowActions != null,
+  );
   const folders = useFolderStore((state) => state.folders);
   const hideNewFlowButton = useUtilityStore((state) => state.hideNewFlowButton);
 
@@ -34,7 +38,7 @@ export const EmptyFolder = ({ setOpenModal, onNewFlow }: EmptyFolderProps) => {
         <p className="pb-5 text-sm text-secondary-foreground">
           {t("emptyPage.description")}
         </p>
-        {!hideNewFlowButton && (
+        {!hideNewFlowButton && (!isPlatform || canCreate) && (
           <Button
             variant="default"
             onClick={() => {
