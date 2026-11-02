@@ -284,10 +284,13 @@ export function useFlowVersionSidebar(flowId: string) {
 
   const handleExport = useCallback(
     async (entry: FlowVersionEntry) => {
-      if (useAuthStore.getState().platformWorkflowActions != null) return;
+      const actions = useAuthStore.getState().platformWorkflowActions;
+      if (actions != null && !actions.includes("version_export")) return;
       try {
         const response = await api.get(
-          `${getURL("FLOWS")}/${flowId}/versions/${entry.id}`,
+          actions != null
+            ? `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${flowId}/versions/${entry.id}/export`
+            : `${getURL("FLOWS")}/${flowId}/versions/${entry.id}`,
         );
         const data = response.data?.data;
         const tag = response.data?.version_tag ?? "version";
@@ -320,7 +323,8 @@ export function useFlowVersionSidebar(flowId: string) {
 
   const handleDelete = useCallback(
     (entry: FlowVersionEntry) => {
-      if (useAuthStore.getState().platformWorkflowActions != null) return;
+      const actions = useAuthStore.getState().platformWorkflowActions;
+      if (actions != null && !actions.includes("version_delete")) return;
       setDeleteDialogEntry(null);
       const entries = versions ?? [];
       const currentIndex = entries.findIndex((e) => e.id === entry.id);

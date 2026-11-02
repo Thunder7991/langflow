@@ -315,7 +315,7 @@ async def test_personal_reads_cannot_be_widened_by_an_authorization_plugin(edito
     assert folder_id not in [row["id"] for row in (await client.get("/api/v1/projects/")).json()]
 
 
-@pytest.mark.parametrize("actions", [[{}], ["read", "delete"], [], None])
+@pytest.mark.parametrize("actions", [[{}], ["read", "unknown_action"], [], None])
 async def test_invalid_platform_actions_fail_closed(editor, actions):
     client, _, live = editor
     live["actions"] = actions

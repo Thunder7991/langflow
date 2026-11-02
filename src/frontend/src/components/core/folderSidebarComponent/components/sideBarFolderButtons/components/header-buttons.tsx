@@ -106,7 +106,8 @@ export const HeaderButtons = ({
           {t("sidebar.projects")}
         </div>
         <div className="flex items-center gap-1">
-          {platformActions == null && (
+          {(platformActions == null ||
+            platformActions.includes("project_import")) && (
             <UploadFolderButton
               onClick={handleUploadFlowsToFolder}
               disabled={isUpdatingFolder}

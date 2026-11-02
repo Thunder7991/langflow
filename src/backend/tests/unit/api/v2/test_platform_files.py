@@ -32,6 +32,74 @@ async def upload(client, name="资料.txt", content=b"hello workflow"):
     )
 
 
+async def test_personal_file_rename_delete_require_explicit_actions(files_editor):
+    client, _, live, root = files_editor
+    file = (await upload(client)).json()
+    path = f"{BASE}/{file['id']}"
+    assert (await client.patch(path, json={"name": "renamed.txt"})).status_code == 403
+    live["actions"] += ["file_update", "file_delete"]
+    response = await client.patch(path, json={"name": "renamed.txt"})
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "renamed.txt"
+    assert response.json()["path"] == file["path"]
+    assert (root / file["path"]).read_bytes() == b"hello workflow"
+    assert (await client.patch(path, json={"name": "bad.py"})).status_code == 422
+    assert (await client.delete(path)).status_code == 204
+    assert not (root / file["path"]).exists()
+    assert (await client.get(path)).status_code == 404
+
+
+async def test_file_mutations_preserve_current_and_historical_references(files_editor):
+    from uuid import UUID
+
+    from langflow.services.database.models.flow.model import Flow
+    from langflow.services.database.models.flow_version.model import FlowVersion
+
+    client, actor, live, root = files_editor
+    file = (await upload(client)).json()
+    live["actions"] += ["file_update", "file_delete"]
+    async with session_scope() as session:
+        flow = Flow(name=uuid4().hex, user_id=actor.id, data={"file_path": file["path"]})
+        session.add(flow)
+        await session.flush()
+        flow_id = flow.id
+    path = f"{BASE}/{file['id']}"
+    for history_only in [False, True]:
+        if history_only:
+            async with session_scope() as session:
+                flow = await session.get(Flow, flow_id)
+                session.add(FlowVersion(flow_id=flow_id, user_id=actor.id, version_number=1, data=flow.data))
+                flow.data = {"nodes": [], "edges": []}
+                session.add(flow)
+        assert (await client.patch(path, json={"name": "changed.txt"})).status_code == 409
+        assert (await client.delete(path)).status_code == 409
+    assert (root / file["path"]).exists()
+    async with session_scope() as session:
+        assert (await session.get(UserFile, UUID(file["id"]))).name == file["name"]
+
+
+async def test_delete_database_failure_restores_file(files_editor, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    client, _, live, root = files_editor
+    file = (await upload(client)).json()
+    live["actions"].append("file_delete")
+    original = AsyncSession.commit
+
+    async def fail_delete(session):
+        if any(isinstance(row, UserFile) for row in session.deleted):
+            message = "test-only deletion failure"
+            raise IntegrityError(message, {}, RuntimeError())
+        return await original(session)
+
+    monkeypatch.setattr(AsyncSession, "commit", fail_delete)
+    response = await client.delete(f"{BASE}/{file['id']}")
+    assert response.status_code == 503
+    assert (root / file["path"]).read_bytes() == b"hello workflow"
+    assert (await client.get(f"{BASE}/{file['id']}")).status_code == 200
+
+
 async def test_upload_list_content_download_and_range(files_editor):
     client, actor, _, root = files_editor
     result = await upload(client)

@@ -1,6 +1,9 @@
 import { forwardRef, type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { api } from "@/controllers/API/api";
+import { getURL } from "@/controllers/API/helpers/constants";
 import { track } from "@/customization/utils/analytics";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import type { FlowType } from "@/types/flow";
 import IconComponent from "../../components/common/genericIconComponent";
@@ -22,6 +25,7 @@ const ExportModal = forwardRef(
     ref,
   ): JSX.Element => {
     const { t } = useTranslation();
+    const actions = useAuthStore((state) => state.platformWorkflowActions);
     const version = useDarkStore((state) => state.version);
     const setSuccessData = useAlertStore((state) => state.setSuccessData);
     const setErrorData = useAlertStore((state) => state.setErrorData);
@@ -54,6 +58,22 @@ const ExportModal = forwardRef(
         setOpen={setOpen}
         onSubmit={async () => {
           try {
+            if (actions != null) {
+              if (
+                !useAuthStore
+                  .getState()
+                  .platformWorkflowActions?.includes("export") ||
+                !currentFlow
+              )
+                return;
+              const response = await api.get<FlowType>(
+                `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${currentFlow.id}/export`,
+              );
+              await downloadFlow(response.data, name, description);
+              setSuccessData({ title: t("success.flowExported", { name }) });
+              setOpen(false);
+              return;
+            }
             let flowToExport: FlowType = {
               id: currentFlow!.id,
               data: currentFlow!.data!,
@@ -115,21 +135,25 @@ const ExportModal = forwardRef(
             locked={locked}
             setLocked={setLocked}
           />
-          <div className="mt-3 flex items-center space-x-2">
-            <Checkbox
-              id="terms"
-              checked={checked}
-              onCheckedChange={(event: boolean) => {
-                setChecked(event);
-              }}
-            />
-            <label htmlFor="terms" className="export-modal-save-api text-sm">
-              {t("misc.saveWithApiCheckbox")}
-            </label>
-          </div>
-          <span className="mt-1 text-xs text-destructive">
-            {t("misc.alertSaveWithApi")}
-          </span>
+          {actions == null && (
+            <div className="mt-3 flex items-center space-x-2">
+              <Checkbox
+                id="terms"
+                checked={checked}
+                onCheckedChange={(event: boolean) => {
+                  setChecked(event);
+                }}
+              />
+              <label htmlFor="terms" className="export-modal-save-api text-sm">
+                {t("misc.saveWithApiCheckbox")}
+              </label>
+            </div>
+          )}
+          {actions == null && (
+            <span className="mt-1 text-xs text-destructive">
+              {t("misc.alertSaveWithApi")}
+            </span>
+          )}
         </BaseModal.Content>
 
         <BaseModal.Footer

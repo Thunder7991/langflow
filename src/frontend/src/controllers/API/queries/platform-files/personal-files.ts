@@ -20,6 +20,22 @@ export type PersonalFilePolicy = {
 };
 const url = () => getURL("PLATFORM_FILES", {}, true);
 
+export async function renamePersonalFile(
+  owner: string,
+  id: string,
+  name: string,
+) {
+  assertAccess(owner, "file_update");
+  await api.patch(`${url()}/${encodeURIComponent(id)}`, { name });
+  assertAccess(owner, "file_update");
+}
+
+export async function deletePersonalFile(owner: string, id: string) {
+  assertAccess(owner, "file_delete");
+  await api.delete(`${url()}/${encodeURIComponent(id)}`);
+  assertAccess(owner, "file_delete");
+}
+
 /** 身份及能力在响应到达时再次比较，旧请求不能给切换后的页面恢复数据。 */
 function assertAccess(owner: string, action: string, signal?: AbortSignal) {
   const state = useAuthStore.getState();

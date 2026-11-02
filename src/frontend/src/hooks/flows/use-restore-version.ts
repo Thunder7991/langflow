@@ -5,6 +5,8 @@ import { api } from "@/controllers/API/api";
 import { getURL } from "@/controllers/API/helpers/constants";
 import useApplyFlowToCanvas from "@/hooks/flows/use-apply-flow-to-canvas";
 import useAlertStore from "@/stores/alertStore";
+import useAuthStore from "@/stores/authStore";
+import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import useVersionPreviewStore from "@/stores/versionPreviewStore";
 
 /** One beat, then try again: long enough for the competing write to commit. */
@@ -24,6 +26,19 @@ export default function useRestoreVersion(flowId: string) {
       versionId: string,
       options?: { saveDraft?: boolean; onSuccess?: () => void },
     ) => {
+      const identity = useAuthStore.getState();
+      const platform = identity.platformWorkflowActions;
+      const saved = useFlowsManagerStore.getState().currentFlow;
+      const version = saved?.id === flowId ? saved.version_token : undefined;
+      if (
+        platform != null &&
+        (!platform.includes("version_restore") || !version)
+      ) {
+        setErrorData({
+          title: "当前没有恢复版本权限或缺少保存版本，请重新加载后重试。",
+        });
+        return;
+      }
       const saveDraft = options?.saveDraft ?? true;
       setIsRestoring(true);
       try {
@@ -33,7 +48,10 @@ export default function useRestoreVersion(flowId: string) {
           api.post(
             `${getURL("FLOWS")}/${flowId}/versions/${versionId}/activate`,
             null,
-            { params: { save_draft: saveDraft } },
+            {
+              params: { save_draft: saveDraft },
+              ...(platform != null ? { headers: { "If-Match": version } } : {}),
+            },
           );
         // A restore that lands at the same moment as an autosave finds the row
         // locked. Nothing is wrong with either write, so the second attempt is
@@ -46,6 +64,17 @@ export default function useRestoreVersion(flowId: string) {
           if (busy?.response?.status !== 503) throw busy;
           await new Promise((resolve) => setTimeout(resolve, RETRY_BUSY_MS));
           response = await activate();
+        }
+        if (
+          platform != null &&
+          (useAuthStore.getState().userData?.id !== identity.userData?.id ||
+            !useAuthStore
+              .getState()
+              .platformWorkflowActions?.includes("version_restore") ||
+            useFlowsManagerStore.getState().currentFlow?.id !== flowId)
+        ) {
+          setIsRestoring(false);
+          return;
         }
         const updatedFlow = response.data;
 

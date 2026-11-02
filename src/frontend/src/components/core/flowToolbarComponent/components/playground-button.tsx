@@ -39,7 +39,13 @@ const PlaygroundButton = ({ hasIO }: PlaygroundButtonProps) => {
   // Running a flow in the playground executes it → gate on the execute action.
   const canRun = can(currentFlowId, "execute");
 
-  if (isPlatform) return <PlatformDryRunButton />;
+  if (isPlatform)
+    return (
+      <>
+        <PlatformDryRunButton />
+        <PlatformDryRunButton action="run" />
+      </>
+    );
 
   if (!canRun) {
     return (

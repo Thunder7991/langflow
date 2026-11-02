@@ -6,6 +6,7 @@ import { act, renderHook } from "@testing-library/react";
 
 const invalidateQueriesMock = jest.fn();
 jest.mock("@tanstack/react-query", () => ({
+  ...jest.requireActual("@tanstack/react-query"),
   useQueryClient: () => ({ invalidateQueries: invalidateQueriesMock }),
 }));
 

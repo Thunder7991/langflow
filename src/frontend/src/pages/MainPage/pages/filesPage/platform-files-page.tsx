@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  deletePersonalFile,
   type PersonalFile,
   readPersonalFile,
+  renamePersonalFile,
   uploadPersonalFile,
   usePlatformFilePolicy,
   usePlatformFiles,
 } from "@/controllers/API/queries/platform-files/personal-files";
+import DeleteConfirmationModal from "@/modals/deleteConfirmationModal";
 import useAuthStore from "@/stores/authStore";
 import { extractApiErrorMessages } from "@/utils/apiError";
 
@@ -17,6 +20,10 @@ export default function PlatformFilesPage() {
   const canRead = actions?.includes("file_read") ?? false;
   const canUpload = canRead && (actions?.includes("file_upload") ?? false);
   const canDownload = canRead && (actions?.includes("file_download") ?? false);
+  const canRename = canRead && (actions?.includes("file_update") ?? false);
+  const canDelete = canRead && (actions?.includes("file_delete") ?? false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [name, setName] = useState("");
   const files = usePlatformFiles();
   const policy = usePlatformFilePolicy();
   const [selected, setSelected] = useState<File | null>(null);
@@ -49,6 +56,26 @@ export default function PlatformFilesPage() {
       useAuthStore.getState().platformWorkflowActions?.includes("file_read")
     )
       void files.refetch();
+  };
+
+  const modify = async (file: PersonalFile, remove = false) => {
+    if (!owner || busy || !(remove ? canDelete : canRename)) return;
+    setBusy(remove ? "delete" : "rename");
+    setError("");
+    try {
+      if (remove) await deletePersonalFile(owner, file.id);
+      else await renamePersonalFile(owner, file.id, name);
+      if (useAuthStore.getState().userData?.id !== owner) return;
+      setEditing(null);
+      setPreview(null);
+      setMessage(remove ? "文件已删除。" : "文件已重命名。");
+      refresh();
+    } catch (failure) {
+      if (useAuthStore.getState().userData?.id === owner)
+        setError(extractApiErrorMessages(failure).join("；"));
+    } finally {
+      if (useAuthStore.getState().userData?.id === owner) setBusy(null);
+    }
   };
 
   const handleUpload = async () => {
@@ -238,6 +265,31 @@ export default function PlatformFilesPage() {
                 className="flex flex-wrap items-center gap-3 py-3"
               >
                 <span className="min-w-0 flex-1 break-all">{file.name}</span>
+                {canRename && editing === file.id && (
+                  <>
+                    <input
+                      aria-label={`新文件名 ${file.name}`}
+                      className="rounded border bg-background p-2 text-sm"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!!busy || !name.trim()}
+                      onClick={() => modify(file)}
+                    >
+                      保存名称
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={!!busy}
+                      onClick={() => setEditing(null)}
+                    >
+                      取消
+                    </Button>
+                  </>
+                )}
                 <span className="text-sm text-muted-foreground">
                   {file.size} 字节
                 </span>
@@ -265,6 +317,30 @@ export default function PlatformFilesPage() {
                   >
                     下载
                   </Button>
+                )}
+                {canRename && editing !== file.id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setEditing(file.id);
+                      setName(file.name);
+                    }}
+                  >
+                    重命名
+                  </Button>
+                )}
+                {canDelete && (
+                  <DeleteConfirmationModal
+                    asChild
+                    description={file.name}
+                    onConfirm={() => modify(file, true)}
+                  >
+                    <Button variant="destructive" size="sm" disabled={!!busy}>
+                      删除
+                    </Button>
+                  </DeleteConfirmationModal>
                 )}
               </li>
             ))}

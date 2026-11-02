@@ -19,8 +19,8 @@ import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import { useUtilityStore } from "@/stores/utilityStore";
 import { extractApiErrorMessages } from "@/utils/apiError";
 import { cn } from "@/utils/utils";
-
 import type { FlowTabType } from "../../types";
+import PlatformImportButton from "./platform-import-button";
 
 interface HeaderComponentProps {
   flowType: FlowTabType;
@@ -151,7 +151,8 @@ const HeaderComponent = ({
   // provider / OSS pass-through) leaves both buttons enabled.
   const { can } = usePermissions();
   const canBulkDownload =
-    !isPlatform && selectedFlows.every((id) => can(id, "read"));
+    (!isPlatform || platformActions.includes("export")) &&
+    selectedFlows.every((id) => can(id, "read"));
   const canBulkDelete = selectedFlows.every((id) => can(id, "delete"));
 
   return (
@@ -343,6 +344,9 @@ const HeaderComponent = ({
                     </DeleteConfirmationModal>
                   )}
                 </div>
+                {/* {isPlatform && platformActions.includes("import") && (
+                  <PlatformImportButton />
+                )} */}
                 {!hideNewFlowButton && (!isPlatform || can(null, "create")) && (
                   <ShadTooltip content={t("mainPage.newFlow")} side="bottom">
                     <Button

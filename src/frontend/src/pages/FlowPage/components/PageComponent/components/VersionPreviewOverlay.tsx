@@ -9,9 +9,7 @@ import SaveSnapshotButton from "./SaveSnapshotButton";
 
 export default function VersionPreviewOverlay() {
   const previewLabel = useVersionPreviewStore((s) => s.previewLabel);
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
   const previewId = useVersionPreviewStore((s) => s.previewId);
   const previewDescription = useVersionPreviewStore(
     (s) => s.previewDescription,
@@ -58,11 +56,12 @@ export default function VersionPreviewOverlay() {
         </div>
       )}
 
-      {!isPlatform && previewLabel === "Current Draft" && (
-        <SaveSnapshotButton flowId={currentFlowId} />
-      )}
+      {(actions == null || actions.includes("version_create")) &&
+        previewLabel === "Current Draft" && (
+          <SaveSnapshotButton flowId={currentFlowId} />
+        )}
 
-      {!isPlatform &&
+      {(actions == null || actions.includes("version_restore")) &&
         previewId &&
         previewLabel &&
         previewLabel !== "Current Draft" && (

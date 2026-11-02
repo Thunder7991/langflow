@@ -2,6 +2,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import type { ReactFlowJsonObject } from "@xyflow/react";
 import type { AxiosError } from "axios";
 import { refetchQueriesFresh } from "@/controllers/API/helpers/query-cache";
+import useAuthStore from "@/stores/authStore";
 import { useFolderStore } from "@/stores/foldersStore";
 import type { useMutationFunctionType } from "@/types/api";
 import type { FlowType } from "@/types/flow";
@@ -10,6 +11,7 @@ import { getURL } from "../../helpers/constants";
 import { UseRequestProcessor } from "../../services/request-processor";
 
 interface IPostAddFlow {
+  sourceFlowId?: string;
   name: string;
   data: ReactFlowJsonObject;
   description: string;
@@ -37,6 +39,16 @@ export const usePostAddFlow: useMutationFunctionType<
   const myCollectionId = useFolderStore((state) => state.myCollectionId);
 
   const postAddFlowFn = async (payload: IPostAddFlow): Promise<FlowType> => {
+    if (
+      payload.sourceFlowId &&
+      useAuthStore.getState().platformWorkflowActions != null
+    ) {
+      const response = await api.post<FlowType>(
+        `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${encodeURIComponent(payload.sourceFlowId)}/duplicate`,
+        { folder_id: payload.folder_id || null },
+      );
+      return response.data;
+    }
     const response = await api.post<FlowType>(`${getURL("FLOWS")}/`, {
       name: payload.name,
       data: payload.data,

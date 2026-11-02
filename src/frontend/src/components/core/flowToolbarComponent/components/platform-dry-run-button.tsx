@@ -23,19 +23,24 @@ type TextRun = {
   outputs: { node_id: string; text: string }[];
 };
 
-export default function PlatformDryRunButton() {
+export default function PlatformDryRunButton({
+  action = "dry_run",
+}: {
+  action?: "dry_run" | "run";
+}) {
   const owner = useAuthStore((state) => state.userData?.id);
   const canRun = useAuthStore(
     (state) =>
       (state.platformWorkflowActions?.includes("read") &&
-        state.platformWorkflowActions.includes("dry_run")) ??
+        state.platformWorkflowActions.includes(action)) ??
       false,
   );
   const current = useFlowStore((state) => state.currentFlow);
   const saved = useFlowsManagerStore((state) => state.currentFlow);
   const nodes = useFlowStore((state) => state.nodes);
   const usesModel = nodes.some((node) => node.data?.type === "PlatformModel");
-  const label = usesModel ? "平台模型调试" : "纯文本调试";
+  const label =
+    action === "run" ? "工作流运行" : usesModel ? "平台模型调试" : "纯文本调试";
   const edges = useFlowStore((state) => state.edges);
   const edited = useFlowStore((state) => state.userEditedSinceLoad);
   const version = saved?.version_token;
@@ -59,6 +64,10 @@ export default function PlatformDryRunButton() {
   const [result, setResult] = useState<TextRun | null>(null);
   const [error, setError] = useState("");
   const waiting = useRef<AbortController | null>(null);
+  const runId = useRef<string | null>(null);
+  const canStop = useAuthStore(
+    (state) => state.platformWorkflowActions?.includes("stop") ?? false,
+  );
 
   useEffect(() => {
     if (waiting.current) {
@@ -88,22 +97,25 @@ export default function PlatformDryRunButton() {
     if (
       actor.userData?.id !== owner ||
       !actor.platformWorkflowActions?.includes("read") ||
-      !actor.platformWorkflowActions?.includes("dry_run")
+      !actor.platformWorkflowActions?.includes(action)
     )
       return;
     const controller = new AbortController();
     waiting.current = controller;
+    runId.current = action === "run" ? crypto.randomUUID() : null;
     setBusy(true);
     setError("");
     setResult(null);
     try {
       const response = await api.post<TextRun>(
-        `${getURL("PLATFORM_FLOWS", {}, true)}/${encodeURIComponent(saved.id)}/dry-run`,
-        {},
+        action === "run"
+          ? `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${encodeURIComponent(saved.id)}/run`
+          : `${getURL("PLATFORM_FLOWS", {}, true)}/${encodeURIComponent(saved.id)}/dry-run`,
+        action === "run" ? { run_id: runId.current } : {},
         {
           signal: controller.signal,
           headers: { "If-Match": version },
-          timeout: usesModel ? 60000 : 15000,
+          timeout: usesModel || action === "run" ? 60000 : 15000,
         },
       );
       if (controller.signal.aborted || waiting.current !== controller) return;
@@ -111,13 +123,18 @@ export default function PlatformDryRunButton() {
       if (
         latest.userData?.id !== owner ||
         !latest.platformWorkflowActions?.includes("read") ||
-        !latest.platformWorkflowActions?.includes("dry_run") ||
+        !latest.platformWorkflowActions?.includes(action) ||
         useFlowStore.getState().currentFlow?.id !== saved.id ||
         useFlowsManagerStore.getState().currentFlow?.version_token !== version
       )
         return;
+      if ((response.data as { status: string }).status === "cancelled") {
+        setError("服务端执行已取消；已发出的模型请求仍可能产生费用。");
+        return;
+      }
       if (
         response.data.status !== "succeeded" ||
+        (action === "run" && response.data.run_id !== runId.current) ||
         response.data.flow_id !== saved.id ||
         response.data.version_token !== version
       )
@@ -155,11 +172,30 @@ export default function PlatformDryRunButton() {
     }
   };
 
+  const stopSaved = async () => {
+    const activeRun = runId.current;
+    if (!saved || !activeRun || !busy || !canStop) return;
+    try {
+      await api.post(
+        `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${saved.id}/runs/${activeRun}/stop`,
+        {},
+      );
+      if (runId.current === activeRun)
+        setError("已请求服务端停止；供应商已受理的请求可能仍计费。");
+    } catch (failure) {
+      if (runId.current === activeRun)
+        setError(extractApiErrorMessages(failure).join("；"));
+    }
+  };
+
   return (
     <>
       {canRun && (
         <Button
           size="sm"
+          data-testid={
+            action === "run" ? "platform-run-button" : "platform-dry-run-button"
+          }
           variant="ghost"
           disabled={!canRun || !sameFlow || !version}
           title={!canRun ? "需要工作流调试权限" : "运行已保存的受控流程"}
@@ -173,9 +209,11 @@ export default function PlatformDryRunButton() {
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
-              {usesModel
-                ? "仅支持文本输入 → 平台模型 → 文本输出，运行已保存版本。模型连接需有凭据使用权限及 secret_use 能力，供应商调用限时 30 秒，不自动重试。"
-                : "仅支持文本输入 → 文本输出，运行已保存版本，执行阶段限时 10 秒。"}
+              {action === "run"
+                ? "运行已保存的基础节点和平台模型图，支持多个节点与分支，限时 45 秒。原生供应商、工具、文件解析、循环和 MCP 需要独立适配。"
+                : usesModel
+                  ? "仅支持文本输入 → 平台模型 → 文本输出，运行已保存版本。模型连接需有凭据使用权限及 secret_use 能力，供应商调用限时 30 秒，不自动重试。"
+                  : "仅支持文本输入 → 文本输出，运行已保存版本，执行阶段限时 10 秒。"}
               文件解析、工具调用和 MCP 尚未开放。
             </DialogDescription>
           </DialogHeader>
@@ -191,6 +229,11 @@ export default function PlatformDryRunButton() {
               onClick={runSaved}
             >
               运行已保存版本
+            </Button>
+          )}
+          {busy && action === "run" && canStop && (
+            <Button variant="outline" onClick={stopSaved}>
+              停止服务端运行
             </Button>
           )}
           {busy && (

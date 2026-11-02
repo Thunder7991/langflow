@@ -1,11 +1,12 @@
 import useAuthStore from "@/stores/authStore";
 import { syncPlatformWorkflowActions } from "../platform-workflow-actions";
 
-it("accepts only the explicit dry_run action, without enabling general execute", () => {
+it("accepts explicit operation actions while rejecting unknown execute alias", () => {
   syncPlatformWorkflowActions("read,dry_run,execute,publish");
   expect(useAuthStore.getState().platformWorkflowActions).toEqual([
     "read",
     "dry_run",
+    "publish",
   ]);
 });
 
@@ -19,12 +20,13 @@ it("keeps explicit file capabilities without deriving them from flow update", ()
     "file_read",
     "file_upload",
     "file_download",
+    "delete",
   ]);
 });
 
 afterEach(() => useAuthStore.setState({ platformWorkflowActions: null }));
 
-it("keeps project and history capabilities independent while ignoring reserved operations", () => {
+it("keeps explicit project, history and execution grants without deriving editing", () => {
   syncPlatformWorkflowActions(
     "read,project_create,version_read,run,stop,publish,project_delete",
   );
@@ -32,6 +34,10 @@ it("keeps project and history capabilities independent while ignoring reserved o
     "read",
     "project_create",
     "version_read",
+    "run",
+    "stop",
+    "publish",
+    "project_delete",
   ]);
 });
 
@@ -52,5 +58,8 @@ it("preserves native mode for responses without the platform header", () => {
   syncPlatformWorkflowActions(undefined);
   expect(useAuthStore.getState().platformWorkflowActions).toBeNull();
   syncPlatformWorkflowActions("read,delete,execute");
-  expect(useAuthStore.getState().platformWorkflowActions).toEqual(["read"]);
+  expect(useAuthStore.getState().platformWorkflowActions).toEqual([
+    "read",
+    "delete",
+  ]);
 });

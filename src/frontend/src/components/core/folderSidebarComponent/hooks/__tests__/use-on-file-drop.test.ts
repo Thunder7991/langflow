@@ -103,7 +103,9 @@ describe("useFileDrop.onDrop (drag-and-drop flow between projects)", () => {
     expect(mockUploadFlowToFolder).not.toHaveBeenCalled();
     expect(mockSaveFlow).not.toHaveBeenCalled();
     expect(mockSetErrorData).toHaveBeenCalledWith(
-      expect.objectContaining({ list: [expect.stringContaining("尚未开放")] }),
+      expect.objectContaining({
+        list: [expect.stringContaining("导入工作流权限")],
+      }),
     );
   });
 

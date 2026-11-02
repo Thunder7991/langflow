@@ -7,6 +7,7 @@ export const URLs = {
   API_KEY: `api_key`,
   FILES: `files`,
   FILE_MANAGEMENT: `files`,
+  PLATFORM_WORKFLOW: `platform-workflow`,
   PLATFORM_FILES: "platform-files",
   PLATFORM_FLOWS: "platform-flows",
   VERSION: `version`,

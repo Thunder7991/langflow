@@ -77,10 +77,7 @@ const ProjectRenamePermission = ({
   children: (canRename: boolean) => ReactNode;
 }) => {
   const { can } = usePermissions();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
-  return children(!isPlatform && can(projectId, "write"));
+  return children(can(projectId, "write"));
 };
 
 const SideBarFoldersButtonsComponent = ({
@@ -184,9 +181,29 @@ const SideBarFoldersButtonsComponent = ({
     isDeletingFolder;
 
   const handleUploadFlowsToFolder = () => {
-    if (isPlatform) return;
-    createFileUpload().then((files: File[]) => {
+    if (isPlatform && !platformActions.includes("project_import")) return;
+    createFileUpload(
+      isPlatform ? { accept: ".json,.zip", multiple: false } : undefined,
+    ).then((files: File[]) => {
       if (files?.length === 0) {
+        return;
+      }
+      // 项目导入统一走项目接口,避免单流程 JSON 意外落到普通流程导入分支。
+      if (isPlatform) {
+        const formData = new FormData();
+        formData.append("file", files[0]);
+        mutate(
+          { formData },
+          {
+            onSuccess: () =>
+              setSuccessData({ title: t("sidebar.projectUploadSuccess") }),
+            onError: (error) =>
+              setErrorData({
+                title: t("sidebar.projectUploadError"),
+                list: extractApiErrorMessages(error),
+              }),
+          },
+        );
         return;
       }
 
@@ -244,7 +261,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleDownloadFolder = (id: string, folderName: string) => {
-    if (isPlatform) return;
+    if (isPlatform && !platformActions.includes("project_export")) return;
     mutateDownloadFolder(
       {
         folderId: id,
@@ -305,7 +322,7 @@ const SideBarFoldersButtonsComponent = ({
   }, [folders]);
 
   const handleEditNameFolder = async (item) => {
-    if (isPlatform) return;
+    if (isPlatform && !platformActions.includes("project_update")) return;
     const newEditFolders = editFolders.map((obj) => {
       if (obj.id === item.id) {
         return { id: item.id, edit: false };
@@ -377,7 +394,7 @@ const SideBarFoldersButtonsComponent = ({
   };
 
   const handleSelectFolderToRename = (item) => {
-    if (isPlatform) return;
+    if (isPlatform && !platformActions.includes("project_update")) return;
     if (!foldersNames[item.id]) {
       setFoldersNames({ [item.id]: item.name });
     }

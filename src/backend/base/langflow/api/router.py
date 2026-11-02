@@ -64,6 +64,7 @@ from langflow.api.v2 import workflow_public_router as workflow_public_router_v2
 from langflow.api.v2.platform_dry_run import models_router as platform_models_router
 from langflow.api.v2.platform_dry_run import router as platform_dry_run_router
 from langflow.api.v2.platform_files import router as platform_files_router
+from langflow.api.v2.platform_workflow import router as platform_workflow_router
 from langflow.api.v2.workflow_host import LangflowWorkflowHost
 
 router_v1 = APIRouter(
@@ -175,6 +176,7 @@ _include_agentic_router()
 
 router_v2.include_router(files_router_v2)
 router_v2.include_router(platform_files_router)
+router_v2.include_router(platform_workflow_router)
 router_v2.include_router(platform_dry_run_router)
 router_v2.include_router(platform_models_router)
 router_v2.include_router(mcp_router_v2)

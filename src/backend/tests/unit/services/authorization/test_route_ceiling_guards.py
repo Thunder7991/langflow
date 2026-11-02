@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from langflow.services.authorization.access_ceiling import (
     ExternalAccessContext,
     set_current_external_access_context,
@@ -133,7 +133,9 @@ async def test_flow_version_create_snapshot_viewer_denied(monkeypatch, owner):
     set_current_external_access_context(_viewer_ceiling())
     try:
         with pytest.raises(HTTPException) as exc_info:
-            await flow_version.create_snapshot(flow_id=flow.id, current_user=owner, session=MagicMock(), body=None)
+            await flow_version.create_snapshot(
+                flow_id=flow.id, request=Request({"type": "http"}), current_user=owner, session=MagicMock(), body=None
+            )
     finally:
         set_current_external_access_context(None)
 
@@ -155,7 +157,11 @@ async def test_flow_version_delete_viewer_denied(monkeypatch, owner):
     try:
         with pytest.raises(HTTPException) as exc_info:
             await flow_version.delete_version_entry(
-                flow_id=flow.id, version_id=uuid4(), current_user=owner, session=MagicMock()
+                flow_id=flow.id,
+                request=Request({"type": "http"}),
+                version_id=uuid4(),
+                current_user=owner,
+                session=MagicMock(),
             )
     finally:
         set_current_external_access_context(None)
@@ -175,7 +181,9 @@ async def test_flow_version_create_snapshot_owner_proceeds(monkeypatch, owner):
     monkeypatch.setattr(flow_version, "create_flow_version_entry", create_spy)
     monkeypatch.setattr(flow_version, "_version_to_read", lambda e: e)
 
-    result = await flow_version.create_snapshot(flow_id=flow.id, current_user=owner, session=MagicMock(), body=None)
+    result = await flow_version.create_snapshot(
+        flow_id=flow.id, request=Request({"type": "http"}), current_user=owner, session=MagicMock(), body=None
+    )
 
     create_spy.assert_awaited_once()
     assert result is entry

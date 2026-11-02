@@ -21,7 +21,7 @@ const useDuplicateFlow = ({ flow }: UseDuplicateFlowsParams) => {
 
       newFlow.folder_id = folder_id;
 
-      await postAddFlow(newFlow);
+      await postAddFlow({ ...newFlow, sourceFlowId: flow.id });
     }
   };
 

@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from starlette.requests import ClientDisconnect
@@ -184,3 +185,80 @@ async def read_personal_file(
             "Cache-Control": "no-store",
         },
     )
+
+
+class RenameFileBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=255)
+
+
+async def require_unreferenced(session, row, user_id):
+    import json
+
+    from langflow.services.database.models.flow.model import Flow
+    from langflow.services.database.models.flow_version.model import FlowVersion
+
+    # 修改显示名会改变图中的文件名校验;历史版本同样要能恢复,不能静默留下失效引用。
+    for model in (Flow, FlowVersion):
+        graphs = (await session.exec(select(model.data).where(model.user_id == user_id))).all()
+        if any(row.path in json.dumps(graph, ensure_ascii=False) for graph in graphs):
+            raise HTTPException(409, "文件被流程或历史版本引用,请先移除引用后再修改或删除。")
+
+
+@router.patch("/{file_id}")
+async def rename_personal_file(
+    file_id: UUID,
+    body: RenameFileBody,
+    request: Request,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+    storage: Storage,
+):
+    policy.authorize(request, current_user.id, "file_update")
+    row = await policy.owned_file(session, file_id, current_user.id, storage)
+    await ensure_file_permission(current_user, FileAction.WRITE, file_id=row.id, file_user_id=row.user_id)
+    name = _validate_file_name(body.name)
+    if PurePosixPath(name).suffix.lower() != PurePosixPath(row.path).suffix.lower():
+        raise HTTPException(422, "重命名不能改变文件类型。")
+    if name != row.name:
+        await require_unreferenced(session, row, current_user.id)
+    row.name = name
+    session.add(row)
+    await session.flush()
+    return {"id": str(row.id), "name": row.name, "path": row.path, "size": row.size}
+
+
+@router.delete("/{file_id}", status_code=204)
+async def delete_personal_file(
+    file_id: UUID,
+    request: Request,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+    storage: Storage,
+):
+    policy.authorize(request, current_user.id, "file_delete")
+    row = await policy.owned_file(session, file_id, current_user.id, storage)
+    await ensure_file_permission(current_user, FileAction.DELETE, file_id=row.id, file_user_id=row.user_id)
+    await require_unreferenced(session, row, current_user.id)
+    path = await policy.local_path(storage, row)
+    pending = path.with_name(f".{path.name}.{uuid4().hex}.delete")
+    # 同目录暂存保证数据库失败时可恢复原文件;取消不能打断补偿过程。
+    with anyio.CancelScope(shield=True):
+        try:
+            await path.rename(pending)
+        except OSError as exc:
+            raise HTTPException(503, "文件存储暂时不可写,请稍后重试。") from exc
+        try:
+            await session.delete(row)
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            await pending.rename(path)
+            raise HTTPException(503, "文件删除未完成,原文件已保留,请稍后重试。") from exc
+        try:
+            await pending.unlink()
+        except OSError:
+            from lfx.log.logger import logger
+
+            # 数据库已提交,残留暂存文件没有 API 入口;记录清理需求,不能误报删除未发生。
+            logger.warning("Platform file removed; quarantined storage requires cleanup")

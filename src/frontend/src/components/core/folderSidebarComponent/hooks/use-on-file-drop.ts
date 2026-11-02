@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { usePostUploadFlowToFolder } from "@/controllers/API/queries/folders/use-post-upload-to-folder";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import { handleBlockedSave } from "@/hooks/flows/handle-blocked-save";
 import useSaveFlow from "@/hooks/flows/use-save-flow";
 import useAuthStore from "@/stores/authStore";
@@ -23,12 +22,13 @@ const useFileDrop = (folderId: string) => {
 
   const { mutate: uploadFlowToFolder } = usePostUploadFlowToFolder();
   const handleFileDrop = async (e, folderId) => {
-    if (useAuthStore.getState().platformWorkflowActions != null) {
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions != null && !actions.includes("import")) {
       setFolderDragging(false);
       setFolderIdDragging("");
       setErrorData({
         title: t("errors.upload"),
-        list: [PLATFORM_UNAVAILABLE_REASON],
+        list: ["当前没有导入工作流权限。"],
       });
       return;
     }

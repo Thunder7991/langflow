@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   readPersonalFile,
+  renamePersonalFile,
   uploadPersonalFile,
   usePlatformFilePolicy,
   usePlatformFiles,
@@ -13,6 +14,8 @@ jest.mock("@/controllers/API/queries/platform-files/personal-files", () => ({
   usePlatformFilePolicy: jest.fn(),
   uploadPersonalFile: jest.fn(),
   readPersonalFile: jest.fn(),
+  renamePersonalFile: jest.fn(),
+  deletePersonalFile: jest.fn(),
 }));
 jest.mock("@/components/ui/button", () => ({
   Button: ({ children, variant, ...props }) => (
@@ -45,6 +48,25 @@ beforeEach(() => {
 afterEach(() =>
   useAuthStore.setState({ userData: null, platformWorkflowActions: null }),
 );
+
+it("renames a personal file only with an independent grant and refreshes the list", async () => {
+  useAuthStore.setState({
+    platformWorkflowActions: ["read", "file_read", "file_update"],
+  });
+  (renamePersonalFile as jest.Mock).mockResolvedValue(undefined);
+  render(<PlatformFilesPage />);
+  fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+  fireEvent.change(screen.getByLabelText("新文件名 资料.txt"), {
+    target: { value: "调试.txt" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存名称" }));
+  expect(await screen.findByText("文件已重命名。")).toBeInTheDocument();
+  expect(renamePersonalFile).toHaveBeenCalledWith("owner", "one", "调试.txt");
+  expect(refetch).toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: "删除" }),
+  ).not.toBeInTheDocument();
+});
 
 it("shows independent read/upload/download capabilities and escaped text preview", async () => {
   (readPersonalFile as jest.Mock).mockResolvedValue("<script>unsafe</script>");

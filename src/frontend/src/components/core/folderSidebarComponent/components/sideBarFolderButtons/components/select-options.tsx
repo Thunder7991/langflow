@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { usePermissions } from "@/contexts/permissionsContext";
 import CustomResourceShareAction from "@/customization/components/custom-resource-share-action";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import type { FolderType } from "@/pages/MainPage/entities";
 import useAuthStore from "@/stores/authStore";
 import { getProjectDisplayName } from "@/utils/project-display-name";
@@ -33,16 +32,30 @@ export const SelectOptions = ({
 }) => {
   const { t } = useTranslation();
   const { can } = usePermissions();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
-  // B2 支持新建空项目；项目改名/导出接口尚未开放，不能套用流程 update。
-  const canRename = !isPlatform && can(item.id, "write");
-  const canDownload = !isPlatform && can(item.id, "read");
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const isPlatform = actions != null;
+  // 项目动作独立授权,不能套用流程 update/export/delete。
+  const canRename =
+    (isPlatform ? actions.includes("project_update") : true) &&
+    can(item.id, "write");
+  const canDownload =
+    (!isPlatform || actions.includes("project_export")) && can(item.id, "read");
   const canDelete = can(item.id, "delete");
   const displayName = getProjectDisplayName(item, t);
   const select = (option: string) => {
-    if (isPlatform) return;
+    if (
+      isPlatform &&
+      !actions.includes(
+        (
+          {
+            rename: "project_update",
+            download: "project_export",
+            delete: "project_delete",
+          } as Record<string, string>
+        )[option],
+      )
+    )
+      return;
     handleSelectChange(
       option,
       item,
@@ -51,7 +64,7 @@ export const SelectOptions = ({
       handleSelectFolderToRename,
     );
   };
-  // 平台尚未开放项目改名、导出、删除；不留下没有可用菜单项的更多按钮。
+  // 没有任何可用操作时隐藏更多按钮。
   if (isPlatform && !canRename && !canDownload && !canDelete) return null;
   return (
     // A menu of commands, not a value to pick: Knowledge Bases, Files and
@@ -95,7 +108,6 @@ export const SelectOptions = ({
           data-testid="btn-rename-project"
           className="text-xs"
           disabled={!canRename}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             select("rename");
@@ -107,7 +119,6 @@ export const SelectOptions = ({
           data-testid="btn-download-project"
           className="text-xs"
           disabled={!canDownload}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             select("download");
@@ -127,7 +138,6 @@ export const SelectOptions = ({
           data-testid="btn-delete-project"
           className="text-xs"
           disabled={!canDelete}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             select("delete");

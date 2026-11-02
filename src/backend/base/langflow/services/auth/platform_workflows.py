@@ -106,7 +106,7 @@ def validate_fields(payload, *, existing: bool = False) -> None:
         "a2a_card_overrides": None,
     }
     for field, default in forbidden.items():
-        if existing and field == "user_id":
+        if existing and field in {"user_id", "access_type"}:
             continue
         value = getattr(payload, field, None)
         if value is not None and value != default and not (field == "endpoint_name" and value == ""):
@@ -305,13 +305,20 @@ async def effective_permissions(request: Request, session: AsyncSession, body, u
                 editable.add(row.id)
     allowed = {
         "read": "read" in identity["actions"],
-        "create": "create" in identity["actions"],
-        "write": body.resource_type == "flow" and "update" in identity["actions"],
+        "create": ("create" if body.resource_type == "flow" else "project_create") in identity["actions"],
+        "write": ("update" if body.resource_type == "flow" else "project_update") in identity["actions"],
+        "delete": ("delete" if body.resource_type == "flow" else "project_delete") in identity["actions"],
+        "execute": "run" in identity["actions"],
     }
     return {
         "resource_type": body.resource_type,
         "permissions": {
-            resource_id: [a for a in requested if allowed.get(a, False) and (a != "write" or resource_id in editable)]
+            resource_id: [
+                a
+                for a in requested
+                if allowed.get(a, False)
+                and (a != "write" or body.resource_type == "project" or resource_id in editable)
+            ]
             if resource_id in owned
             else []
             for resource_id in body.resource_ids

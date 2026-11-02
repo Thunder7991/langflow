@@ -162,28 +162,14 @@ def _actions(identity: dict) -> list[str]:
     # An A1 platform can still serve read-only sessions during a coordinated upgrade.
     if "authorizationVersion" not in identity:
         return ["read"]
+    from langflow.services.auth.platform_actions import ACTIONS
+
     actions = identity.get("actions")
     if (
         identity["authorizationVersion"] != 1
         or identity.get("resourceScope") != "personal"
         or not isinstance(actions, list)
-        or not all(
-            isinstance(a, str)
-            and a
-            in {
-                "read",
-                "create",
-                "update",
-                "move",
-                "project_create",
-                "version_read",
-                "dry_run",
-                "file_read",
-                "file_upload",
-                "file_download",
-            }
-            for a in actions
-        )
+        or not all(isinstance(a, str) and a in ACTIONS for a in actions)
         or "read" not in actions
         or (bool({"file_upload", "file_download"}.intersection(actions)) and "file_read" not in actions)
     ):
@@ -463,8 +449,13 @@ class PlatformSsoMiddleware:
             elif method == "POST" and path == "/api/v1/custom_component/update":
                 # 仅放行到处理器的受控内置节点校验, 不开放任意组件代码入口。
                 action = "update"
+            from langflow.services.auth.platform_actions import check_native_owner, route_action
+
+            action = route_action(method, path) or action
             if action is not None:
                 allowed = action in actions
+            if allowed:
+                await check_native_owner(path, claims["sub"], actions, method)
             if (
                 not allowed
                 or "x-api-key" in connection.query_params

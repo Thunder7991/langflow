@@ -3,7 +3,6 @@ import ForwardedIconComponent from "@/components/common/genericIconComponent";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { usePermissions } from "@/contexts/permissionsContext";
 import CustomFlowShareAction from "@/customization/components/custom-flow-share-action";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAlertStore from "@/stores/alertStore";
 import useAuthStore from "@/stores/authStore";
 import type { FlowType } from "@/types/flow";
@@ -26,12 +25,14 @@ const DropdownComponent = ({
 }: DropdownComponentProps) => {
   const { t } = useTranslation();
   const { can } = usePermissions();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const isPlatform = actions != null;
   const canEdit = can(flowData.id, "write");
-  const canExport = !isPlatform && can(flowData.id, "read");
-  const canDuplicate = !isPlatform && can(flowData.id, "create");
+  const canExport =
+    (!isPlatform || actions.includes("export")) && can(flowData.id, "read");
+  const canDuplicate =
+    (!isPlatform || actions.includes("duplicate")) &&
+    can(flowData.id, "create");
   const canDelete = can(flowData.id, "delete");
   const setSuccessData = useAlertStore((state) => state.setSuccessData);
   const setErrorData = useAlertStore((state) => state.setErrorData);
@@ -87,7 +88,6 @@ const DropdownComponent = ({
       {(!isPlatform || canExport) && (
         <DropdownMenuItem
           disabled={!canExport}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             handleSelectOptionsChange("export");
@@ -106,7 +106,6 @@ const DropdownComponent = ({
       {(!isPlatform || canDuplicate) && (
         <DropdownMenuItem
           disabled={!canDuplicate}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             handleSelectOptionsChange("duplicate");
@@ -132,7 +131,6 @@ const DropdownComponent = ({
       {(!isPlatform || canDelete) && (
         <DropdownMenuItem
           disabled={!canDelete}
-          title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
           onClick={(e) => {
             e.stopPropagation();
             if (canDelete) setOpenDelete(true);

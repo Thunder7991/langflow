@@ -27,6 +27,7 @@ import {
 } from "@/utils/permissionUtils";
 
 export interface PermissionsContextValue {
+  resourceType?: PermissionResourceType;
   /** Returns true when `action` is allowed on `resourceId` (fail-open). */
   can: (
     resourceId: string | undefined | null,
@@ -59,10 +60,16 @@ export function usePermissions(): PermissionsContextValue {
       ...context,
       can: (resourceId, action) => {
         const required = (
-          { read: "read", write: "update", create: "create" } as Record<
-            string,
-            string
-          >
+          {
+            read: "read",
+            write:
+              context.resourceType === "project" ? "project_update" : "update",
+            create:
+              context.resourceType === "project" ? "project_create" : "create",
+            delete:
+              context.resourceType === "project" ? "project_delete" : "delete",
+            execute: "run",
+          } as Record<string, string>
         )[action];
         if (!required || !actions.includes(required)) return false;
         // 查询失败时 React Query 可能仍保留旧授权数据, 平台编辑不能沿用缓存放行。
@@ -143,13 +150,14 @@ export function PermissionsProvider({
   const value = useMemo<PermissionsContextValue>(() => {
     const permissions = buildPermissionMap(data);
     return {
+      resourceType,
       permissions,
       isLoading,
       isError,
       can: (resourceId, action) =>
         canPerformAction(permissions, resourceId, action),
     };
-  }, [data, isLoading, isError]);
+  }, [data, isLoading, isError, resourceType]);
 
   return (
     <PermissionsContext.Provider value={value}>

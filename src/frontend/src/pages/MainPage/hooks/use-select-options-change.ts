@@ -20,7 +20,7 @@ const useSelectOptionsChange = (
       const actions = useAuthStore.getState().platformWorkflowActions;
       if (
         actions != null &&
-        (action !== "edit" || !actions.includes("update"))
+        !actions.includes(action === "edit" ? "update" : action)
       ) {
         setErrorData({
           title: t("errors.saveChanges"),

@@ -1249,6 +1249,7 @@ async def create_flows(
 @audited_route(audit_vocab.AuditResourceType.FLOW, audit_vocab.FLOW_CREATE, audit_vocab.AuditOperation.CREATE)
 async def upload_file(
     *,
+    request: Request,
     session: DbSession,
     file: Annotated[UploadFile | None, File()] = None,
     current_user: CurrentActiveUser,
@@ -1256,6 +1257,12 @@ async def upload_file(
     storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
     """Upload flows from a JSON or ZIP file (upsert semantics for flows with stable IDs)."""
+    from langflow.services.auth.platform_workflows import context
+
+    if context(request) is not None:
+        from langflow.api.v2.platform_workflow import import_upload
+
+        return await import_upload(file, request, current_user, session, storage_service, folder_id=folder_id)
     # Authorization is enforced per-flow below, after parsing — the per-flow
     # check uses the actual workspace_id/folder_id each uploaded flow targets.
     # A coarse pre-parse check here would over-reject (it would authorize the
@@ -1430,10 +1437,20 @@ async def upload_file(
 )
 async def delete_multiple_flows(
     flow_ids: list[UUID],
+    request: Request,
     user: CurrentActiveUser,
     db: DbSession,
 ):
     """Delete multiple flows by their IDs."""
+    from langflow.services.auth.platform_workflows import context, require_personal_destination
+
+    if context(request) is not None:
+        for target_id in set(flow_ids):
+            target = await db.get(Flow, target_id)
+            if target is None or target.user_id != user.id or target.workspace_id is not None:
+                raise HTTPException(404, "Flow not found")
+            await require_personal_destination(db, target.folder_id, user.id)
+
     from langflow.services.memory_base.flow_cleanup import FlowMemoryBaseCleanup, finalize_flow_memory_base_cleanup
 
     actor = UserRead.model_validate(user, from_attributes=True)
@@ -1529,10 +1546,20 @@ async def delete_multiple_flows(
 @router.post("/download/", status_code=200)
 async def download_multiple_file(
     flow_ids: list[UUID],
+    request: Request,
     user: CurrentActiveUser,
     db: DbSession,
 ):
     """Download all flows as a zip file."""
+    from langflow.services.auth.platform_workflows import context, require_personal_destination
+
+    if context(request) is not None:
+        for target_id in set(flow_ids):
+            target = await db.get(Flow, target_id)
+            if target is None or target.user_id != user.id or target.workspace_id is not None:
+                raise HTTPException(404, "Flow not found")
+            await require_personal_destination(db, target.folder_id, user.id)
+
     # TODO: Full-version download (include_version parameter) is planned as a follow-up feature.
     # When implemented, add an include_version: bool = False parameter and embed version
     # entries in each flow dict using get_flow_versions_with_provider_status and strip_version_data.

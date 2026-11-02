@@ -84,7 +84,11 @@ const ListComponent = ({
   const actions = useAuthStore((state) => state.platformWorkflowActions);
   const canMove =
     can(flowData.id, "write") && (actions == null || actions.includes("move"));
-  const showOptions = actions == null || can(flowData.id, "write");
+  const showOptions =
+    actions == null ||
+    ["update", "export", "duplicate", "delete"].some((action) =>
+      actions.includes(action),
+    );
 
   const { onDragStart } = useDragStart(flowData);
 

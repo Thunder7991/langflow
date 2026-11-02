@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
-import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAuthStore from "@/stores/authStore";
 import type { FlowVersionEntry } from "@/types/flow/version";
 import { cn } from "@/utils/utils";
@@ -32,9 +31,9 @@ export default function VersionListItem({
   onDeleteClick,
 }: VersionListItemProps) {
   const { t } = useTranslation();
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const canExport = actions == null || actions.includes("version_export");
+  const canDelete = actions == null || actions.includes("version_delete");
   return (
     <SidebarMenuItem
       className={cn(
@@ -66,7 +65,7 @@ export default function VersionListItem({
           </span>
         </div>
         <div className="flex items-center">
-          {!isPlatform && (
+          {(canExport || canDelete) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -93,10 +92,9 @@ export default function VersionListItem({
               <DropdownMenuContent side="right" align="start" className="w-40">
                 <DropdownMenuItem
                   onClick={() => {
-                    if (!isPlatform) onExport(entry);
+                    if (canExport) onExport(entry);
                   }}
-                  disabled={isPlatform}
-                  title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                  disabled={!canExport}
                   className="cursor-pointer"
                 >
                   <ForwardedIconComponent
@@ -107,10 +105,9 @@ export default function VersionListItem({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    if (!isPlatform) onDeleteClick(entry);
+                    if (canDelete) onDeleteClick(entry);
                   }}
-                  disabled={isPlatform}
-                  title={isPlatform ? PLATFORM_UNAVAILABLE_REASON : undefined}
+                  disabled={!canDelete}
                   className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
                 >
                   <ForwardedIconComponent

@@ -571,10 +571,11 @@ export default function Page({
   }
 
   function handleDownload(e: KeyboardEvent) {
-    if (useAuthStore.getState().platformWorkflowActions != null) {
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions != null && !actions.includes("export")) {
       e.preventDefault();
       setErrorData({
-        title: "导出尚未开放",
+        title: "当前没有导出工作流权限",
         list: [PLATFORM_UNAVAILABLE_REASON],
       });
       return;

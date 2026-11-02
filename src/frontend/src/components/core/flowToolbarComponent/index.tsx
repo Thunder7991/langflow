@@ -12,21 +12,36 @@ import FlowToolbarOptions from "./components/flow-toolbar-options";
 
 const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   const preventDefault = true;
-  const isPlatform = useAuthStore(
-    (state) => state.platformWorkflowActions != null,
-  );
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const isPlatform = actions != null;
   const [openApiModal, setOpenApiModal] = useState<boolean>(false);
   const [openExportModal, setOpenExportModal] = useState<boolean>(false);
   const isPlaygroundOpen = usePlaygroundStore((state) => state.isOpen);
   const setPlaygroundOpen = usePlaygroundStore((state) => state.setIsOpen);
   const handleAPIWShortcut = (e: KeyboardEvent) => {
-    if (isPlatform) return;
+    if (isPlatform) {
+      if (actions.includes("api_access"))
+        document
+          .querySelector<HTMLButtonElement>(
+            '[data-testid="platform-access-menu-button"]',
+          )
+          ?.click();
+      return;
+    }
     if (isThereModal() && !openApiModal) return;
     setOpenApiModal((oldOpen) => !oldOpen);
   };
 
   const handleChatWShortcut = (e: KeyboardEvent) => {
-    if (isPlatform) return;
+    if (isPlatform) {
+      if (actions.includes("run"))
+        document
+          .querySelector<HTMLButtonElement>(
+            '[data-testid="platform-run-button"]',
+          )
+          ?.click();
+      return;
+    }
     if (isThereModal() && !isPlaygroundOpen) return;
     if (useFlowStore.getState().hasIO) {
       setPlaygroundOpen(!isPlaygroundOpen);
@@ -34,7 +49,7 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   };
 
   const handleShareWShortcut = (e: KeyboardEvent) => {
-    if (isPlatform) return;
+    if (isPlatform && !actions.includes("export")) return;
     if (isThereModal() && !openExportModal) return;
     setOpenExportModal((oldState) => !oldState);
   };
@@ -52,9 +67,9 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
     if (isPlatform) {
       setPlaygroundOpen(false);
       setOpenApiModal(false);
-      setOpenExportModal(false);
+      if (!actions.includes("export")) setOpenExportModal(false);
     }
-  }, [isPlatform, setPlaygroundOpen]);
+  }, [isPlatform, actions, setPlaygroundOpen]);
 
   useEffect(() => {
     if (isPlaygroundOpen) {
@@ -76,7 +91,7 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
           />
         </div>
       </Panel>
-      {!isPlatform && (
+      {(!isPlatform || actions.includes("export")) && (
         <ExportModal open={openExportModal} setOpen={setOpenExportModal} />
       )}
     </>

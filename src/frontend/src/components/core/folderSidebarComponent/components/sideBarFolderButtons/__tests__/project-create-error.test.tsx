@@ -253,65 +253,72 @@ describe("project creation errors", () => {
     });
   });
 
-  it("qualifies foreign duplicate names and only renames writable projects by id", () => {
-    mockFolders = [
-      {
-        id: "own-id",
-        name: "Starter Project",
-        description: "",
-        parent_id: "",
-        flows: [],
-        components: [],
-        owner_username: "current-user",
-        is_owner: true,
-      },
-      {
-        id: "foreign-id",
-        name: "Starter Project",
-        description: "",
-        parent_id: "",
-        flows: [],
-        components: [],
-        owner_username: "other-user",
-        is_owner: false,
-      },
-    ];
+  it.each<{ actions: string[] | null }>([
+    { actions: null },
+    { actions: ["read", "project_update"] },
+  ])(
+    "qualifies foreign duplicate names and only renames writable projects by id (%j)",
+    ({ actions }) => {
+      mockPlatformActions = actions;
+      mockFolders = [
+        {
+          id: "own-id",
+          name: "Starter Project",
+          description: "",
+          parent_id: "",
+          flows: [],
+          components: [],
+          owner_username: "current-user",
+          is_owner: true,
+        },
+        {
+          id: "foreign-id",
+          name: "Starter Project",
+          description: "",
+          parent_id: "",
+          flows: [],
+          components: [],
+          owner_username: "other-user",
+          is_owner: false,
+        },
+      ];
 
-    mockCan.mockImplementation(
-      (projectId: string | undefined | null, action: string) =>
-        action !== "write" || projectId !== "foreign-id",
-    );
+      mockCan.mockImplementation(
+        (projectId: string | undefined | null, action: string) =>
+          action !== "write" || projectId !== "foreign-id",
+      );
 
-    render(<SideBarFoldersButtonsComponent handleChangeFolder={jest.fn()} />);
+      render(<SideBarFoldersButtonsComponent handleChangeFolder={jest.fn()} />);
 
-    expect(screen.getByTestId("sidebar-nav-own-id")).toBeInTheDocument();
-    expect(screen.getByTestId("sidebar-nav-foreign-id")).toBeInTheDocument();
-    const ownLabel = screen.getByText("Starter Project");
-    const foreignLabel = screen.getByText("Starter Project — other-user");
-    fireEvent.doubleClick(foreignLabel);
+      expect(screen.getByTestId("sidebar-nav-own-id")).toBeInTheDocument();
+      expect(screen.getByTestId("sidebar-nav-foreign-id")).toBeInTheDocument();
+      const ownLabel = screen.getByText("Starter Project");
+      const foreignLabel = screen.getByText("Starter Project — other-user");
+      fireEvent.doubleClick(foreignLabel);
 
-    expect(
-      screen.queryByTestId("input-project-foreign-id"),
-    ).not.toBeInTheDocument();
-    expect(mockMutateUpdateFolder).not.toHaveBeenCalled();
+      expect(
+        screen.queryByTestId("input-project-foreign-id"),
+      ).not.toBeInTheDocument();
+      expect(mockMutateUpdateFolder).not.toHaveBeenCalled();
 
-    fireEvent.doubleClick(ownLabel);
+      fireEvent.doubleClick(ownLabel);
 
-    const ownInput = screen.getByTestId("input-project-own-id");
-    expect(
-      screen.queryByTestId("input-project-foreign-id"),
-    ).not.toBeInTheDocument();
-    expect(ownInput).toHaveValue("Starter Project");
+      const ownInput = screen.getByTestId("input-project-own-id");
+      expect(
+        screen.queryByTestId("input-project-foreign-id"),
+      ).not.toBeInTheDocument();
+      expect(ownInput).toHaveValue("Starter Project");
 
-    fireEvent.change(ownInput, { target: { value: "Renamed Project" } });
-    fireEvent.blur(ownInput);
+      fireEvent.change(ownInput, { target: { value: "Renamed Project" } });
+      fireEvent.blur(ownInput);
 
-    expect(mockMutateUpdateFolder).toHaveBeenCalledWith(
-      {
-        data: expect.objectContaining({ name: "Renamed Project" }),
-        folderId: "own-id",
-      },
-      expect.any(Object),
-    );
-  });
+      expect(mockMutateUpdateFolder).toHaveBeenCalledWith(
+        {
+          data: expect.objectContaining({ name: "Renamed Project" }),
+          folderId: "own-id",
+        },
+        expect.any(Object),
+      );
+    },
+  );
 });

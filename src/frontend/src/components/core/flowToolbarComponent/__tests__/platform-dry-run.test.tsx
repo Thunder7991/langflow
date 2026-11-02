@@ -48,6 +48,41 @@ afterEach(() =>
   useAuthStore.setState({ userData: null, platformWorkflowActions: null }),
 );
 
+it("runs and stops through independent platform actions using the same run ID", async () => {
+  useAuthStore.setState({ platformWorkflowActions: ["read", "run", "stop"] });
+  let finish!: (value: unknown) => void;
+  (api.post as jest.Mock).mockImplementation((url: string) =>
+    url.endsWith("/stop")
+      ? Promise.resolve({ data: { status: "cancel_requested" } })
+      : new Promise((resolve) => {
+          finish = resolve;
+        }),
+  );
+  const view = render(<PlaygroundButton hasIO />);
+  expect(
+    screen.queryByRole("button", { name: "纯文本调试" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "工作流运行" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+  const runId = (api.post as jest.Mock).mock.calls[0][1].run_id;
+  expect(runId).toMatch(/^[a-f0-9-]{36}$/);
+  expect((api.post as jest.Mock).mock.calls[0][0]).toContain(
+    `/platform-workflow/flows/${saved.id}/run`,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "停止服务端运行" }));
+  await waitFor(() =>
+    expect((api.post as jest.Mock).mock.calls[1][0]).toContain(
+      `/runs/${runId}/stop`,
+    ),
+  );
+  await act(async () =>
+    finish({ data: { status: "cancelled", run_id: runId, outputs: [] } }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("已取消");
+  view.unmount();
+});
+
 it("runs the saved version with no posted graph and renders escaped output", async () => {
   (api.post as jest.Mock).mockResolvedValue({
     data: {

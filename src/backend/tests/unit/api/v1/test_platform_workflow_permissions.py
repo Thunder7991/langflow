@@ -44,7 +44,9 @@ async def test_moving_a_personal_flow_requires_both_update_and_move(editor):
 
 
 @pytest.mark.parametrize("action", ["delete", "export", "publish", "run"])
-async def test_unimplemented_actions_are_not_accepted_as_sso_capabilities(editor, action):
+async def test_explicit_operation_actions_are_accepted_without_granting_editing(editor, action):
     client, _, live = editor
     live["actions"] = ["read", action]
-    assert (await client.get("/api/v1/session")).status_code == 503
+    response = await client.get("/api/v1/session")
+    assert response.status_code == 200
+    assert "update" not in response.headers["x-workflow-actions"].split(",")

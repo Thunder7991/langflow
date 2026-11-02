@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from lfx.log import logger
 from lfx.services.settings.feature_flags import FEATURE_FLAGS
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -209,10 +209,14 @@ async def get_single_flow_version(
 @router.post("/", status_code=201, response_model_exclude={"is_deployed"})
 async def create_snapshot(
     flow_id: UUID,
+    request: Request,
     current_user: CurrentActiveUser,
     session: DbSession,
     body: FlowVersionCreate | None = None,
 ) -> FlowVersionRead:
+    from langflow.services.auth.platform_workflows import require_action
+
+    require_action(request, "version_create")
     flow = await _get_user_flow(session, flow_id, current_user.id)
     await ensure_flow_permission(
         current_user,
@@ -239,6 +243,9 @@ async def create_snapshot(
                 detail="Flow data could not be copied for snapshot. The data may be corrupted.",
             ) from exc
 
+    from langflow.services.auth.platform_actions import validate_graph_references
+
+    await validate_graph_references(request, session, data, current_user.id)
     try:
         entry = await create_flow_version_entry(
             session,
@@ -261,6 +268,7 @@ async def create_snapshot(
 )
 async def activate_version(
     flow_id: UUID,
+    request: Request,
     version_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
@@ -268,6 +276,13 @@ async def activate_version(
     save_draft: Annotated[bool, Query()] = True,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> FlowRead:
+    from langflow.services.auth.platform_workflows import require_action
+
+    if require_action(request, "version_restore"):
+        require_action(request, "update")
+        require_action(request, "version_read")
+        if not if_match:
+            raise HTTPException(428, "Restore requires If-Match")
     flow = await _get_user_flow(session, flow_id, current_user.id)
     await ensure_version_precondition(session, flow, parse_if_match(if_match))
     # The write below shares this transaction; a decision the audit writer commits
@@ -309,6 +324,9 @@ async def activate_version(
                 detail="Flow data could not be copied. The data may be corrupted.",
             ) from exc
 
+        from langflow.services.auth.platform_actions import validate_graph_references
+
+        await validate_graph_references(request, session, target_data, current_user.id)
         _validate_catalog_policy_for_write(
             target_data,
             snapshot=get_catalog_policy_service().snapshot,
@@ -374,10 +392,14 @@ async def activate_version(
 @router.delete("/{version_id}", status_code=204)
 async def delete_version_entry(
     flow_id: UUID,
+    request: Request,
     version_id: UUID,
     current_user: CurrentActiveUser,
     session: DbSession,
 ) -> None:
+    from langflow.services.auth.platform_workflows import require_action
+
+    require_action(request, "version_delete")
     flow = await _get_user_flow(session, flow_id, current_user.id)
     await ensure_flow_permission(
         current_user,

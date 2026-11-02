@@ -26,6 +26,7 @@ import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import { cn } from "@/utils/utils";
+import PlatformAccessMenu from "./platform-access-menu";
 import { buildShareablePlaygroundUrl } from "./shareable-playground-url";
 
 type PublishDropdownProps = {
@@ -38,7 +39,7 @@ export default function PublishDropdown({ ...props }: PublishDropdownProps) {
   const platformActions = useAuthStore(
     (state) => state.platformWorkflowActions,
   );
-  if (platformActions != null) return null;
+  if (platformActions != null) return <PlatformAccessMenu />;
   return <NativePublishDropdown {...props} />;
 }
 

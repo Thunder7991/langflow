@@ -14,7 +14,7 @@ from lfx.log.logger import logger
 from lfx.services.mcp_composer.service import MCPComposerService
 from lfx.utils.util_strings import escape_like_pattern
 from sqlalchemy import literal, null, or_, text, update
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
@@ -2027,6 +2027,7 @@ def _folder_create_to_update(project: FolderCreate) -> FolderUpdate:
 )
 async def update_project(
     *,
+    request: Request,
     session: DbSession,
     project_id: UUID,
     project: FolderUpdate,  # Assuming FolderUpdate is a Pydantic model defining updatable fields
@@ -2078,6 +2079,22 @@ async def update_project(
             not_found_detail="Project not found",
         ) from exc
 
+    from langflow.services.auth.platform_workflows import require_action
+
+    if require_action(request, "project_update"):
+        if project.auth_settings is not None or project.flows or project.components or project.parent_id:
+            raise HTTPException(403, "Project update only accepts name and description")
+        # 平台项目改名不触发原生 MCP 重命名或配置注册。
+        if project.name is not None:
+            existing_project.name = project.name
+        if project.description is not None:
+            existing_project.description = project.description
+        session.add(existing_project)
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            raise HTTPException(409, "Project name already exists") from exc
+        return FolderRead.model_validate(existing_project, from_attributes=True)
     try:
         return await _apply_project_update(
             session=session,
@@ -2438,6 +2455,7 @@ async def download_file(
 )
 async def upload_file(
     *,
+    request: Request,
     session: DbSession,
     file: Annotated[UploadFile | None, File()] = None,
     current_user: CurrentActiveUser,
@@ -2447,5 +2465,12 @@ async def upload_file(
     Accepts either a JSON file with project metadata (folder_name, folder_description, flows)
     or a ZIP file containing individual flow JSON files (as produced by the download endpoint).
     """
+    from langflow.services.auth.platform_workflows import context
+
+    if context(request) is not None:
+        from langflow.api.v2.platform_workflow import import_upload
+        from langflow.services.deps import get_storage_service
+
+        return await import_upload(file, request, current_user, session, get_storage_service(), project=True)
     await audited_permission(ensure_project_permission(current_user, ProjectAction.CREATE))
     return await upload_project_flows(session=session, file=file, current_user=current_user)

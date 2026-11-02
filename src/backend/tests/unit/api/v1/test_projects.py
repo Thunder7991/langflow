@@ -390,6 +390,7 @@ async def test_update_project_cannot_rename_system_starter(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         await projects_module.update_project(
+            request=Request({"type": "http"}),
             session=AsyncMock(),
             project_id=project_id,
             project=FolderUpdate(name="Renamed starter"),
