@@ -62,6 +62,7 @@ export default function PlatformFilesPage() {
     if (!owner || busy || !(remove ? canDelete : canRename)) return;
     setBusy(remove ? "delete" : "rename");
     setError("");
+    setMessage("");
     try {
       if (remove) await deletePersonalFile(owner, file.id);
       else await renamePersonalFile(owner, file.id, name);
@@ -173,7 +174,7 @@ export default function PlatformFilesPage() {
     <section className="flex h-full w-full flex-col gap-5 overflow-auto p-6">
       <h1 className="text-xl font-semibold">我的文件</h1>
       <p className="text-sm text-muted-foreground">
-        仅显示本人文件。上传、读取和下载分别授权；删除、重命名和批量操作尚未开放。
+        仅显示本人文件，各项操作按平台权限开放。被流程或历史版本引用的文件需先解除引用，才能重命名或删除。
       </p>
       {policy.data && (
         <p className="text-sm text-muted-foreground">

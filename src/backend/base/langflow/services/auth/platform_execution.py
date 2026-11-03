@@ -8,6 +8,8 @@ from inspect import getsource
 
 from fastapi import HTTPException
 
+from langflow.services.auth.platform_dry_run import parse_handle
+
 # 原生供应商、MCP、任意代码与文件解析仍需各自的凭据/资源适配,不能因 run 权限绕过。
 REVIEWED = {
     "TextInput": ("input_output.text", "TextInputComponent"),
@@ -120,7 +122,7 @@ def prepared_graph(data, *, input_text=None):
     for edge in edges:
         try:
             source, target = edge["source"], edge["target"]
-            source_handle, target_handle = json.loads(edge["sourceHandle"]), json.loads(edge["targetHandle"])
+            source_handle, target_handle = parse_handle(edge["sourceHandle"]), parse_handle(edge["targetHandle"])
             if source_handle["id"] != source or target_handle["id"] != target:
                 raise ValueError
             if source_handle["name"] not in outputs[source] or target_handle["fieldName"] not in inputs[target]:
@@ -154,7 +156,7 @@ def prepared_graph(data, *, input_text=None):
                 }
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise HTTPException(422, "Invalid graph connection") from exc
+            raise HTTPException(422, "节点连线无效，请重新连接后保存并重试。") from exc  # noqa: RUF001
     queue = [node_id for node_id, degree in indegree.items() if degree == 0]
     visited = 0
     while queue:

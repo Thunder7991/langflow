@@ -4,10 +4,13 @@ from pathlib import PurePosixPath
 from uuid import UUID
 
 from fastapi import HTTPException, Request
-from sqlmodel import select
+from sqlalchemy.exc import DBAPIError
+from sqlmodel import select, update
 
 from langflow.services.auth.platform_workflows import context, require_action
+from langflow.services.database.lock_retry import is_database_lock_error
 from langflow.services.database.models.file.model import File as UserFile
+from langflow.services.database.models.user.model import User
 from langflow.services.storage.local import LocalStorageService
 
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -16,6 +19,35 @@ CHUNK_BYTES = 64 * 1024
 MAX_REFERENCES = 100
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
 EXTENSIONS = TEXT_EXTENSIONS | {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+
+
+async def lock_personal_files(session, user_id: UUID) -> None:
+    """Serialize reference checks and mutations through the caller's DB transaction."""
+    # 按本人串行协调, 跨进程有效; 锁随事务提交/回滚释放, 不能使用 worker 内存锁。
+    # PostgreSQL 的 NO KEY UPDATE 不阻塞审计等外键写入; NOWAIT 避免锁顺序形成长等待。
+    # 自赋值不改变资料, 同时产生行版本, 防止 REPEATABLE READ 继续使用旧引用快照。
+    try:
+        with session.no_autoflush:
+            if session.get_bind().dialect.name == "postgresql":
+                await session.exec(
+                    select(User.id).where(User.id == user_id).with_for_update(nowait=True, key_share=True)
+                )
+            # SQLite 没有行锁, 以写事务预留阻止另一连接在检查后抢先删除或重命名。
+            await session.exec(
+                update(User)
+                .where(User.id == user_id)
+                .values(profile_image=User.profile_image)
+                .execution_options(synchronize_session=False)
+            )
+    except DBAPIError as exc:
+        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+        if is_database_lock_error(exc) or code in {"55P03", "40001", "40P01"}:
+            raise HTTPException(
+                503,
+                {"code": "platform_file_operation_busy", "message": "文件正在被其他操作使用，请稍后重试。"},  # noqa: RUF001
+                headers={"Retry-After": "1"},
+            ) from exc
+        raise
 
 
 def authorize(request: Request, user_id: UUID, action: str) -> dict:
@@ -82,6 +114,7 @@ async def validate_references(request: Request, session, data: dict | None, user
     if not fields:
         return set()
     authorize(request, user_id, "file_read")
+    await lock_personal_files(session, user_id)
     paths = set()
     for field in fields:
         supplied = field.get("file_path")

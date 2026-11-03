@@ -302,3 +302,71 @@ async def test_full_action_grants_do_not_allow_other_users_resources(editor):
         assert (await client.get(f"/api/v2/platform-workflow/flows/{foreign_id}/{action}")).status_code == 404
     assert (await client.delete(f"/api/v1/flows/{foreign_id}")).status_code == 404
     assert (await client.request("DELETE", "/api/v1/flows/", json=[foreign_id])).status_code == 404
+
+
+@pytest.mark.parametrize("operation", ["run", "dry-run"])
+async def test_execution_accepts_handles_saved_by_react_canvas(editor, operation):
+    from tests.unit.api.v2.test_platform_dry_run import text_flow
+
+    client, _, live = editor
+    flow = await text_flow(client, "canvas wire format")
+    for edge in flow["data"]["edges"]:
+        for key in ("sourceHandle", "targetHandle"):
+            edge[key] = edge[key].replace('"', "œ")
+    saved = await client.patch(
+        f"/api/v1/flows/{flow['id']}", json={"data": flow["data"]}, headers={"If-Match": flow["version_token"]}
+    )
+    assert saved.status_code == 200, saved.text
+    live["actions"] += ["run", "dry_run"]
+    path = (
+        f"/api/v2/platform-workflow/flows/{flow['id']}/run"
+        if operation == "run"
+        else f"/api/v2/platform-flows/{flow['id']}/dry-run"
+    )
+    result = await client.post(path, json={}, headers={"If-Match": saved.json()["version_token"]})
+    assert result.status_code == 200, result.text
+    assert {"node_id": "TextOutput-b5", "text": "canvas wire format"} in result.json()["outputs"]
+
+
+@pytest.mark.parametrize("operation", ["import", "duplicate", "project_import", "flow_upload", "project_upload"])
+async def test_import_operations_respect_native_create_denial_and_roll_back(editor, monkeypatch, operation):
+    import json
+
+    from fastapi import HTTPException
+    from langflow.api.v1 import authz_route_dependencies
+
+    client, _, live = editor
+    flow = await create(client)
+    live["actions"] += ["import", "duplicate", "project_import", "project_create"]
+    before = (await client.get("/api/v1/projects/")).json()
+
+    async def deny(*_args, **_kwargs):
+        raise HTTPException(403, "Create permission denied")
+
+    monkeypatch.setattr(authz_route_dependencies, "ensure_flow_permission", deny)
+    if operation in {"flow_upload", "project_upload"}:
+        path = "/api/v1/flows/upload/" if operation == "flow_upload" else "/api/v1/projects/upload/"
+        result = await client.post(path, files={"file": ("review.json", json.dumps(flow), "application/json")})
+    elif operation == "duplicate":
+        path, body = f"flows/{flow['id']}/duplicate", {}
+    elif operation == "project_import":
+        path, body = "projects/import", {"flows": [flow], "project_name": uuid4().hex}
+    else:
+        path, body = "import", {"flows": [flow]}
+    if operation not in {"flow_upload", "project_upload"}:
+        result = await client.post(f"/api/v2/platform-workflow/{path}", json=body)
+    assert result.status_code == 403, result.text
+    assert (await client.get("/api/v1/projects/")).json() == before
+
+
+@pytest.mark.parametrize("bad_fields", [{"name": []}, {"description": {}}, {"tags": 42}, {"data": []}])
+async def test_invalid_import_returns_input_error_without_partial_writes(editor, bad_fields):
+    client, _, live = editor
+    live["actions"].append("import")
+    before = (await client.get("/api/v1/flows/")).json()
+    result = await client.post(
+        "/api/v2/platform-workflow/import",
+        json={"flows": [{"name": "valid", "data": GRAPH}, {"name": "invalid", "data": GRAPH, **bad_fields}]},
+    )
+    assert result.status_code == 422, result.text
+    assert (await client.get("/api/v1/flows/")).json() == before

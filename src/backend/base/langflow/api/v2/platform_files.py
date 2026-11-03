@@ -18,6 +18,7 @@ from langflow.api.utils import CurrentActiveUser, DbSession, build_content_dispo
 from langflow.api.v2.files import _validate_file_name
 from langflow.services.auth import platform_files as policy
 from langflow.services.authorization import FileAction, ensure_file_permission
+from langflow.services.authorization.guards import audit_guard_in_transaction
 from langflow.services.database.models.file.model import File as UserFile
 from langflow.services.deps import get_settings_service, get_storage_service
 from langflow.services.storage.local import LocalStorageService
@@ -215,16 +216,26 @@ async def rename_personal_file(
     storage: Storage,
 ):
     policy.authorize(request, current_user.id, "file_update")
+    await policy.lock_personal_files(session, current_user.id)
     row = await policy.owned_file(session, file_id, current_user.id, storage)
-    await ensure_file_permission(current_user, FileAction.WRITE, file_id=row.id, file_user_id=row.user_id)
+    async with audit_guard_in_transaction(session):
+        await ensure_file_permission(current_user, FileAction.WRITE, file_id=row.id, file_user_id=row.user_id)
     name = _validate_file_name(body.name)
     if PurePosixPath(name).suffix.lower() != PurePosixPath(row.path).suffix.lower():
         raise HTTPException(422, "重命名不能改变文件类型。")
     if name != row.name:
         await require_unreferenced(session, row, current_user.id)
-    row.name = name
-    session.add(row)
-    await session.flush()
+    try:
+        # 保存点只回滚本次重命名; 不能把数据库驱动的 SQL/参数返回给用户。
+        async with session.begin_nested():
+            row.name = name
+            session.add(row)
+            await session.flush()
+    except IntegrityError as exc:
+        code = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+        if code == "23505" or getattr(exc.orig, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE":
+            raise HTTPException(409, "已存在同名文件，请使用其他名称。") from exc  # noqa: RUF001
+        raise HTTPException(503, "文件重命名未完成，原文件已保留，请稍后重试。") from exc  # noqa: RUF001
     return {"id": str(row.id), "name": row.name, "path": row.path, "size": row.size}
 
 
@@ -237,8 +248,10 @@ async def delete_personal_file(
     storage: Storage,
 ):
     policy.authorize(request, current_user.id, "file_delete")
+    await policy.lock_personal_files(session, current_user.id)
     row = await policy.owned_file(session, file_id, current_user.id, storage)
-    await ensure_file_permission(current_user, FileAction.DELETE, file_id=row.id, file_user_id=row.user_id)
+    async with audit_guard_in_transaction(session):
+        await ensure_file_permission(current_user, FileAction.DELETE, file_id=row.id, file_user_id=row.user_id)
     await require_unreferenced(session, row, current_user.id)
     path = await policy.local_path(storage, row)
     pending = path.with_name(f".{path.name}.{uuid4().hex}.delete")

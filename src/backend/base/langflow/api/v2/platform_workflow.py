@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from langflow.api.utils import CurrentActiveUser, DbSession
 from langflow.api.utils.core import strip_secret_field_values
@@ -77,6 +77,7 @@ class ImportBody(BaseModel):
 
 
 async def import_flows(body, request, user, session, storage):
+    from langflow.api.v1.authz_route_dependencies import require_flow_create_permission
     from langflow.api.v1.flows import create_flow
 
     require_action(request, "create")
@@ -84,29 +85,38 @@ async def import_flows(body, request, user, session, storage):
     pending = []
     for raw in body.flows:
         # 导入只创建新副本;不接受外部 owner、ID、公开访问、webhook、路径或凭据副作用。
-        flow = FlowCreate(
-            name=raw.get("name", "Imported workflow"),
-            description=raw.get("description"),
-            data=deepcopy(raw.get("data")),
-            folder_id=body.folder_id,
-            icon=raw.get("icon"),
-            gradient=raw.get("gradient"),
-            tags=raw.get("tags"),
-            mcp_enabled=False,
-        )
+        try:
+            flow = FlowCreate(
+                name=raw.get("name", "Imported workflow"),
+                description=raw.get("description"),
+                data=deepcopy(raw.get("data")),
+                folder_id=body.folder_id,
+                icon=raw.get("icon"),
+                gradient=raw.get("gradient"),
+                tags=raw.get("tags"),
+                mcp_enabled=False,
+            )
+        except ValidationError as exc:
+            # 不返回导入原文或校验器上下文, 防止文件中的凭据被带到错误提示中。
+            raise HTTPException(
+                422,
+                f"第 {len(pending) + 1} 个流程格式不正确，请检查名称、描述、标签及节点数据。",  # noqa: RUF001
+            ) from exc
         await validate_create(request, session, flow, user.id)
         pending.append(flow)
     results = []
     # 整个批次同一事务,后续任一图失败不能留下部分流程。
     async with session.begin_nested():
         for flow in pending:
-            results.append(  # noqa: PERF401 - transactional async writes
+            # 直接调用处理器不会运行 FastAPI Depends, 必须执行与普通新建相同的原生授权。
+            destination = await require_flow_create_permission(request, user, flow, session)
+            results.append(
                 await create_flow(
                     request=request,
                     session=session,
                     flow=flow,
                     current_user=user,
-                    _create=(None, flow.folder_id),
+                    _create=destination,
                     storage_service=storage,
                 )
             )

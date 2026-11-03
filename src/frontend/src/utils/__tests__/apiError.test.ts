@@ -1,5 +1,22 @@
 import { extractApiErrorMessages } from "../apiError";
 
+it("explains a file transaction conflict without showing driver data", () => {
+  const messages = extractApiErrorMessages({
+    platformWorkflow: true,
+    response: {
+      status: 503,
+      data: {
+        detail: {
+          code: "platform_file_operation_busy",
+          message: "SQL parameters must not be displayed",
+        },
+      },
+    },
+  });
+  expect(messages.join(" ")).toMatch(/文件.*稍后重试/);
+  expect(messages.join(" ")).not.toContain("SQL");
+});
+
 describe("extractApiErrorMessages", () => {
   it("explains network uncertainty without falsely claiming a write failed or succeeded", () => {
     expect(

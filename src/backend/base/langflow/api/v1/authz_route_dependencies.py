@@ -11,6 +11,7 @@ from langflow.api.utils import CurrentActiveUser, DbSession
 from langflow.api.v1.flows_helpers import _canonicalize_flow_destination, _read_flow
 from langflow.services.authorization import FlowAction, ensure_flow_permission
 from langflow.services.authorization.fetch import deny_to_404
+from langflow.services.authorization.guards import audit_guard_in_transaction
 from langflow.services.database.models.flow.model import Flow, FlowCreate
 from langflow.services.database.models.folder.model import Folder
 
@@ -126,13 +127,15 @@ async def require_flow_create_permission(
     # override cover creating a flow in a project you own — the new flow has no
     # owner of its own yet.
     destination_folder = await session.get(Folder, destination_folder_id)
-    await ensure_flow_permission(
-        current_user,
-        FlowAction.CREATE,
-        workspace_id=flow.workspace_id,
-        folder_id=flow.folder_id,
-        folder_user_id=getattr(destination_folder, "user_id", None),
-    )
+    # 文件引用校验可能已持有写锁, durable 审计必须同事务提交, 不能等待第二个 SQLite writer。
+    async with audit_guard_in_transaction(session):
+        await ensure_flow_permission(
+            current_user,
+            FlowAction.CREATE,
+            workspace_id=flow.workspace_id,
+            folder_id=flow.folder_id,
+            folder_user_id=getattr(destination_folder, "user_id", None),
+        )
     return destination
 
 

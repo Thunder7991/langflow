@@ -49,6 +49,119 @@ async def test_personal_file_rename_delete_require_explicit_actions(files_editor
     assert (await client.get(path)).status_code == 404
 
 
+async def test_rename_conflict_returns_409_and_preserves_both_files(files_editor):
+    client, _, live, root = files_editor
+    first = (await upload(client, "first.txt", b"first")).json()
+    second = (await upload(client, "second.txt", b"second")).json()
+    live["actions"].append("file_update")
+    response = await client.patch(f"{BASE}/{first['id']}", json={"name": second["name"]})
+    assert response.status_code == 409, response.text
+    assert {row["name"] for row in (await client.get(BASE)).json()} == {"first.txt", "second.txt"}
+    assert (root / first["path"]).read_bytes() == b"first"
+    assert (root / second["path"]).read_bytes() == b"second"
+    assert (await client.patch(f"{BASE}/{first['id']}", json={"name": "available.txt"})).status_code == 200
+
+
+async def test_rename_database_failure_is_not_reported_as_duplicate_name(files_editor, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    client, _, live, root = files_editor
+    file = (await upload(client, "original.txt")).json()
+    live["actions"].append("file_update")
+    original = AsyncSession.flush
+
+    async def fail_file_update(session, *args, **kwargs):
+        if any(isinstance(row, UserFile) for row in session.dirty):
+            message = "internal SQL and parameters"
+            raise IntegrityError(message, {}, RuntimeError())
+        return await original(session, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "flush", fail_file_update)
+    result = await client.patch(f"{BASE}/{file['id']}", json={"name": "changed.txt"})
+    assert result.status_code == 503, result.text
+    assert "internal SQL" not in result.text
+    assert (await client.get(BASE)).json()[0]["name"] == "original.txt"
+    assert (root / file["path"]).read_bytes() == b"hello workflow"
+
+
+@pytest.mark.parametrize("operation", ["create", "duplicate", "move", "rename", "delete"])
+async def test_file_transactions_support_durable_authorization_audit(files_editor, monkeypatch, operation):
+    import asyncio
+
+    from langflow.services.deps import get_settings_service
+
+    from tests.unit.api.v1.test_platform_sso_editing import GRAPH, create
+
+    client, _, live, _ = files_editor
+    file = (await upload(client)).json()
+    graph = {**GRAPH, "attachment": {"type": "file", "value": [file["name"]], "file_path": [file["path"]]}}
+    live["actions"] += ["duplicate", "move", "project_create", "file_update", "file_delete"]
+    flow = await create(client)
+    if operation in {"duplicate", "move"}:
+        response = await client.patch(
+            f"/api/v1/flows/{flow['id']}", json={"data": graph}, headers={"If-Match": flow["version_token"]}
+        )
+        assert response.status_code == 200, response.text
+        flow = response.json()
+    project = (await client.post("/api/v1/projects/", json={"name": uuid4().hex})).json()
+    settings = get_settings_service().auth_settings
+    monkeypatch.setattr(settings, "AUTHZ_AUDIT_ENABLED", True)
+    monkeypatch.setattr(settings, "AUTHZ_AUDIT_DURABLE", True)
+    if operation == "create":
+        pending = client.post("/api/v1/flows/", json={"name": "audited file", "data": graph})
+    elif operation == "duplicate":
+        pending = client.post(f"/api/v2/platform-workflow/flows/{flow['id']}/duplicate", json={})
+    elif operation == "move":
+        pending = client.patch(f"/api/v1/flows/{flow['id']}", json={"folder_id": project["id"]})
+    elif operation == "rename":
+        pending = client.patch(f"{BASE}/{file['id']}", json={"name": "renamed.txt"})
+    else:
+        pending = client.delete(f"{BASE}/{file['id']}")
+    result = await asyncio.wait_for(pending, 5)
+    assert result.status_code in {200, 201, 204}, result.text
+    from langflow.services.database.models.auth.authz import AuthzAuditLog
+    from sqlmodel import select
+
+    expected = {
+        "create": "flow:create",
+        "duplicate": "flow:create",
+        "move": "flow:write",
+        "rename": "file:write",
+        "delete": "file:delete",
+    }[operation]
+    async with session_scope() as session:
+        decisions = (await session.exec(select(AuthzAuditLog).where(AuthzAuditLog.action == expected))).all()
+        assert any(row.result in {"allow", "owner_override"} for row in decisions)
+
+
+@pytest.mark.parametrize("operation", ["create", "import", "duplicate"])
+async def test_owned_file_references_survive_all_creation_paths(files_editor, operation):
+    from tests.unit.api.v1.test_platform_sso_editing import GRAPH, create
+
+    client, actor, live, _ = files_editor
+    file = (await upload(client)).json()
+    graph = {**GRAPH, "attachment": {"type": "file", "value": [file["name"]], "file_path": [file["path"]]}}
+    live["actions"] += ["import", "duplicate"]
+    if operation == "create":
+        response = await client.post("/api/v1/flows/", json={"name": "with-file", "data": graph})
+    elif operation == "import":
+        response = await client.post(
+            "/api/v2/platform-workflow/import", json={"flows": [{"name": "with-file", "data": graph}]}
+        )
+    else:
+        flow = await create(client)
+        saved = await client.patch(
+            f"/api/v1/flows/{flow['id']}", json={"data": graph}, headers={"If-Match": flow["version_token"]}
+        )
+        assert saved.status_code == 200, saved.text
+        response = await client.post(f"/api/v2/platform-workflow/flows/{flow['id']}/duplicate", json={})
+    assert response.status_code == 201, response.text
+    result = response.json()[0] if operation == "import" else response.json()
+    assert result["user_id"] == str(actor.id)
+    assert result["data"]["attachment"] == graph["attachment"]
+
+
 async def test_file_mutations_preserve_current_and_historical_references(files_editor):
     from uuid import UUID
 

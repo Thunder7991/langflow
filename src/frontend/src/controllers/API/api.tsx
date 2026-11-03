@@ -237,13 +237,11 @@ function ApiInterceptor() {
     // Browser automatically sends cookies (including HttpOnly) with requests
     const requestInterceptor = api.interceptors.request.use(
       async (config) => {
-        const controller = new AbortController();
         try {
           checkDuplicateRequestAndStoreRequest(config);
         } catch (e) {
           const error = e as Error;
-          controller.abort(error.message);
-          console.error(error.message);
+          throw new axios.CanceledError(error.message, config);
         }
 
         const currentOrigin = window.location.origin;
@@ -262,10 +260,8 @@ function ApiInterceptor() {
           config.headers["x-langflow-client"] = "playground";
         }
 
-        return {
-          ...config,
-          signal: controller.signal,
-        };
+        // 上传取消、权限撤销及离开页面共用调用方的 signal，不能替换成不可达的 controller。
+        return config;
       },
       (error) => {
         return Promise.reject(error);

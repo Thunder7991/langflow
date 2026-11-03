@@ -95,10 +95,20 @@ def gateway(monkeypatch):
     return calls
 
 
-async def test_saved_model_graph_executes_via_platform_and_preserves_version(editor, gateway):
+@pytest.mark.parametrize("canvas_handles", [False, True])
+async def test_saved_model_graph_executes_via_platform_and_preserves_version(editor, gateway, canvas_handles):
     client, _, live = editor
     live["actions"].append("dry_run")
     flow = await model_flow(client)
+    if canvas_handles:
+        for edge in flow["data"]["edges"]:
+            for key in ("sourceHandle", "targetHandle"):
+                edge[key] = edge[key].replace('"', "œ")
+        saved = await client.patch(
+            f"/api/v1/flows/{flow['id']}", json={"data": flow["data"]}, headers={"If-Match": flow["version_token"]}
+        )
+        assert saved.status_code == 200, saved.text
+        flow = saved.json()
     result = await client.post(
         f"/api/v2/platform-flows/{flow['id']}/dry-run", json={}, headers={"If-Match": flow["version_token"]}
     )

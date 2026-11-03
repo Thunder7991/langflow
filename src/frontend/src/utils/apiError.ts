@@ -56,6 +56,14 @@ export function extractApiErrorMessages(error: unknown): string[] {
     return ["流程版本发生冲突，当前草稿已保留，请比较后再加载最新版本。"];
   }
   if (platformError) {
+    if (
+      e.response?.status === 503 &&
+      detail &&
+      typeof detail === "object" &&
+      !Array.isArray(detail) &&
+      detail.code === "platform_file_operation_busy"
+    )
+      return ["文件正在被其他操作使用，请稍后重试；当前未保存内容仍保留。"];
     if (!e.response)
       return [
         "工作流网络连接异常，操作结果尚未确认；当前未保存内容仍保留，请恢复连接后核对。",

@@ -336,11 +336,10 @@ async def create_flow(
     storage_service: Annotated[StorageService, Depends(get_storage_service)],
 ):
     try:
-        from langflow.services.auth.platform_workflows import require_action, validate_graph
+        from langflow.services.auth.platform_workflows import validate_create
 
-        if require_action(request, "create"):
-            # FastAPI依赖与处理器可能拥有不同body实例; 持久化的图也必须替换成可信模板副本。
-            validate_graph(flow.data)
+        # 处理器与 Depends 可能持有不同 body; 对真正持久化的图重新验证本人文件及模型引用。
+        await validate_create(request, session, flow, current_user.id)
         catalog_policy_snapshot = get_catalog_policy_service().snapshot
         _validate_catalog_policy_for_write(flow.data, snapshot=catalog_policy_snapshot)
         await persist_and_strip_mcp_secrets(flow.data, current_user.id, session, flow_id=flow.id)
@@ -693,16 +692,17 @@ async def update_flow(
             flow.folder_id = target_folder_id
         if target_workspace_id != db_flow.workspace_id or target_folder_id != db_flow.folder_id:
             try:
-                await audited_permission(
-                    ensure_flow_permission(
-                        actor,
-                        FlowAction.WRITE,
-                        flow_id=flow_id,
-                        flow_user_id=db_flow.user_id,
-                        workspace_id=target_workspace_id,
-                        folder_id=target_folder_id,
+                async with audit_guard_in_transaction(session):
+                    await audited_permission(
+                        ensure_flow_permission(
+                            actor,
+                            FlowAction.WRITE,
+                            flow_id=flow_id,
+                            flow_user_id=db_flow.user_id,
+                            workspace_id=target_workspace_id,
+                            folder_id=target_folder_id,
+                        )
                     )
-                )
             except HTTPException as exc:
                 raise deny_to_404(exc, detail="Flow not found") from exc
 

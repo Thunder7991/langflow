@@ -14,6 +14,19 @@ TIMEOUT_SECONDS = 10
 ACTIVE_USERS: set[str] = set()
 
 
+def parse_handle(value: str) -> dict:
+    """Decode both persisted canvas handles and legacy JSON handles."""
+    # 画布以 œ 替换引号; 先解析标准 JSON, 避免破坏合法 ID 中的 œ 字符。
+    try:
+        handle = json.loads(value)
+    except ValueError:
+        handle = json.loads(value.replace("œ", '"'))
+    if not isinstance(handle, dict):
+        message = "Invalid connection handle"
+        raise TypeError(message)
+    return handle
+
+
 def text_pair(data: dict) -> tuple[str, str, str]:
     if not isinstance(data, dict) or len(json.dumps(data).encode()) > 256 * 1024:
         raise HTTPException(422, "Dry run graph is missing or too large")
@@ -57,8 +70,8 @@ def text_pair(data: dict) -> tuple[str, str, str]:
     if source_id == target_id or edge.get("source") != source_id or edge.get("target") != target_id:
         raise HTTPException(422, "Invalid text graph connection")
     try:
-        source_handle = json.loads(edge["sourceHandle"])
-        target_handle = json.loads(edge["targetHandle"])
+        source_handle = parse_handle(edge["sourceHandle"])
+        target_handle = parse_handle(edge["targetHandle"])
         if (
             source_handle["id"] != source_id
             or source_handle["name"] != "text"
@@ -67,7 +80,7 @@ def text_pair(data: dict) -> tuple[str, str, str]:
         ):
             raise ValueError
     except (KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(422, "Invalid text graph handles") from exc
+        raise HTTPException(422, "节点连线无效，请重新连接后保存并重试。") from exc  # noqa: RUF001
     return source_id, target_id, value
 
 
@@ -126,8 +139,8 @@ def model_chain(data: dict) -> tuple[str, str, str, str, dict]:
     if len(inbound) != 1 or len(outbound) != 1 or inbound[0] is outbound[0]:
         raise HTTPException(422, "Invalid platform model connection")
     try:
-        target_handle = json.loads(inbound[0]["targetHandle"])
-        source_handle = json.loads(outbound[0]["sourceHandle"])
+        target_handle = parse_handle(inbound[0]["targetHandle"])
+        source_handle = parse_handle(outbound[0]["sourceHandle"])
         if (
             target_handle["id"] != model_id
             or target_handle["fieldName"] != "input_value"
@@ -136,7 +149,7 @@ def model_chain(data: dict) -> tuple[str, str, str, str, dict]:
         ):
             raise ValueError
     except (KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(422, "Invalid platform model handles") from exc
+        raise HTTPException(422, "模型节点连线无效，请重新连接后保存并重试。") from exc  # noqa: RUF001
     # 复用已验证的文本首尾检查; 执行图仍由服务器类重建, 不使用保存的输出方法。
     source, target, text = text_pair(
         {
