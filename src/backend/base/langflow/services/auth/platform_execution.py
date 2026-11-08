@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import time
+from contextvars import ContextVar
 from copy import deepcopy
 from importlib import import_module
 from inspect import getsource
@@ -25,6 +27,29 @@ MAX_NODE_ID = 100
 
 ACTIVE: dict[tuple[str, str, str], asyncio.Task] = {}
 ACTIVE_MODELS: set[tuple[str, str, str]] = set()
+# 仅平台 Playground 订阅安全事件; 普通运行接口保持原有 JSON 响应。
+EVENT_SINK: ContextVar = ContextVar("platform_execution_events", default=None)
+DRAFT_RUNS: dict[tuple[str, str, str], float] = {}
+MAX_DRAFT_RUN_RECORDS = 4096
+
+
+def emit(event_type, **data):
+    sink = EVENT_SINK.get()
+    if sink is not None:
+        sink({"type": event_type, **data})
+
+
+def claim_draft_run(key):
+    now = time.monotonic()
+    for previous, expires in list(DRAFT_RUNS.items()):
+        if expires <= now:
+            del DRAFT_RUNS[previous]
+    if key in DRAFT_RUNS:
+        raise HTTPException(409, "该草稿运行 ID 已受理, 请勿重复执行。")
+    # 草稿防重有界且不驱逐未过期记录; 发布运行仍使用数据库跨 worker 防重。
+    if len(DRAFT_RUNS) >= MAX_DRAFT_RUN_RECORDS:
+        raise HTTPException(429, "草稿调试受理记录已满, 请稍后再试。")
+    DRAFT_RUNS[key] = now + 600
 
 
 def prepared_graph(data, *, input_text=None):
@@ -181,6 +206,7 @@ def prepared_graph(data, *, input_text=None):
 
 
 async def execute(data, *, flow_id, user_id, run_id, invoke):
+    from lfx.events.event_manager import EventManager
     from lfx.graph import Graph
     from lfx.schema.message import Message
 
@@ -202,12 +228,29 @@ async def execute(data, *, flow_id, user_id, run_id, invoke):
         graph = Graph.from_payload(data, flow_id=flow_id, user_id=user_id, emit_extension_events=False)
         graph.set_run_id(run_id)
         results = []
-        async for item in graph.async_start(max_iterations=len(data["nodes"]) + 1, fallback_to_env_vars=False):
+        starts = {}
+
+        def node_started(manager, event_type, data):  # noqa: ARG001 - EventManager requires these parameter names.
+            node_id = data["id"]
+            starts[node_id] = time.monotonic()
+            emit("node_started", node_id=node_id)
+
+        manager = EventManager(None)
+        manager.register_event("on_build_start", "node_started", node_started)
+        async for item in graph.async_start(
+            max_iterations=len(data["nodes"]) + 1, fallback_to_env_vars=False, event_manager=manager
+        ):
             if failure:
                 raise failure
             if hasattr(item, "valid") and not item.valid:
                 raise HTTPException(422, "Node execution failed; check node inputs and connections")
             if hasattr(item, "vertex"):
+                # 进度仅包含节点标识与耗时, 中间文本及组件内部参数不提前交付。
+                emit(
+                    "node_finished",
+                    node_id=item.vertex.id,
+                    duration_ms=round((time.monotonic() - starts.get(item.vertex.id, time.monotonic())) * 1000),
+                )
                 for value in item.result_dict.results.values():
                     if isinstance(value, Message):
                         results.append({"node_id": item.vertex.id, "text": value.text or ""})  # noqa: PERF401 - filter typed node results

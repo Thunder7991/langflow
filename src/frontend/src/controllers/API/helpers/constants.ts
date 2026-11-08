@@ -10,6 +10,7 @@ export const URLs = {
   PLATFORM_WORKFLOW: `platform-workflow`,
   PLATFORM_FILES: "platform-files",
   PLATFORM_FLOWS: "platform-flows",
+  PLATFORM_PLAYGROUND: "platform-playground",
   VERSION: `version`,
   MESSAGES: `monitor/messages`,
   BUILDS: `monitor/builds`,

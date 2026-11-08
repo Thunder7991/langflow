@@ -922,7 +922,7 @@
   "components.chatinput.inputs.should_store_message.info.b40af1c4": "将消息保存到历史记录中。",
   "components.chatinput.outputs.message.display_name.e2bfb87c": "聊天消息",
   "components.chatoutput.description.96dfb7b9": "在“Playground”中显示一条聊天消息。",
-  "components.chatoutput.display_name.d6e697d0": "聊天记录",
+  "components.chatoutput.display_name.d6e697d0": "聊天输出",
   "components.chatoutput.inputs.clean_data.display_name.a4d26799": "基础清洁数据",
   "components.chatoutput.inputs.clean_data.info.b5c430c5": "在转换为字符串之前是否清理数据。",
   "components.chatoutput.inputs.context_id.display_name.2051cde7": "上下文标识",

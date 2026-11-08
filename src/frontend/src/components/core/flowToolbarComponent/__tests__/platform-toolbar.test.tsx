@@ -42,3 +42,16 @@ it("closes an already-open playground after platform capabilities arrive", () =>
   act(() => useAuthStore.setState({ platformWorkflowActions: ["read"] }));
   expect(usePlaygroundStore.getState().isOpen).toBe(false);
 });
+
+it("opens the platform playground shortcut with debug permission and preserves it on capability refresh", () => {
+  useAuthStore.setState({ platformWorkflowActions: ["read", "dry_run"] });
+  render(<FlowToolbar />);
+  fireEvent.keyDown(document.body, { key: "p", code: "KeyP" });
+  expect(usePlaygroundStore.getState().isOpen).toBe(true);
+  act(() =>
+    useAuthStore.setState({
+      platformWorkflowActions: ["read", "dry_run", "stop"],
+    }),
+  );
+  expect(usePlaygroundStore.getState().isOpen).toBe(true);
+});

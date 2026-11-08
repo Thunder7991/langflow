@@ -428,6 +428,9 @@ class PlatformSsoMiddleware:
                 action = "version_read"
             if method == "POST" and re.fullmatch(r"/api/v2/platform-flows/[0-9a-fA-F-]{36}/dry-run", path):
                 action = "dry_run"
+            if method == "POST" and re.fullmatch(r"/api/v2/platform-playground/[0-9a-fA-F-]{36}", path):
+                # body 的运行模式由处理器检查, 不放开任何原生执行或聊天记录接口。
+                action = "read"
             if method == "GET" and path == "/api/v2/platform-models":
                 action = "read"
             if path == "/api/v2/platform-files" or re.fullmatch(

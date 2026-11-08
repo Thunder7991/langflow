@@ -34,12 +34,11 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
 
   const handleChatWShortcut = (e: KeyboardEvent) => {
     if (isPlatform) {
-      if (actions.includes("run"))
-        document
-          .querySelector<HTMLButtonElement>(
-            '[data-testid="platform-run-button"]',
-          )
-          ?.click();
+      if (
+        actions.includes("read") &&
+        (actions.includes("dry_run") || actions.includes("run"))
+      )
+        setPlaygroundOpen(!isPlaygroundOpen);
       return;
     }
     if (isThereModal() && !isPlaygroundOpen) return;
@@ -63,9 +62,13 @@ const FlowToolbar = memo(function FlowToolbar(): JSX.Element {
   useHotkeys(flow, handleShareWShortcut, { preventDefault });
 
   useEffect(() => {
-    // 撤权只收起未开放的运行/导出面板，不重置画布和未保存草稿。
+    // 能力刷新保留已开放的聊天面板; 完全撤销执行权限才收起。
     if (isPlatform) {
-      setPlaygroundOpen(false);
+      if (
+        !actions.includes("read") ||
+        (!actions.includes("dry_run") && !actions.includes("run"))
+      )
+        setPlaygroundOpen(false);
       setOpenApiModal(false);
       if (!actions.includes("export")) setOpenExportModal(false);
     }

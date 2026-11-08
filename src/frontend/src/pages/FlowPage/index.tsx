@@ -3,6 +3,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useTranslation } from "react-i18next";
 import { useBlocker, useParams } from "react-router-dom";
 import { AssistantPanel } from "@/components/core/assistantPanel";
+import { PlatformPlayground } from "@/components/core/playgroundComponent/platform-playground";
 import { FlowPageSlidingContainerContent } from "@/components/core/playgroundComponent/sliding-container/components/flow-page-sliding-container";
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import {
@@ -289,12 +290,20 @@ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
       (output) => output.type === "ChatOutput",
     );
 
-    if (isSlidingContainerOpen && !hasChatInput && !hasChatOutput) {
+    const hasPlatformIO =
+      isPlatform && (inputs.length > 0 || outputs.length > 0);
+    if (
+      isSlidingContainerOpen &&
+      !hasChatInput &&
+      !hasChatOutput &&
+      !hasPlatformIO
+    ) {
       setSlidingContainerOpen(false);
       setIsFullscreen(false);
     }
   }, [
     inputs,
+    isPlatform,
     outputs,
     isSlidingContainerOpen,
     setSlidingContainerOpen,
@@ -381,7 +390,12 @@ export default function FlowPage({ view }: { view?: boolean }): JSX.Element {
                 </SidebarProvider>
               </div>
               <SimpleSidebar resizable={!isFullscreen} className="h-full">
-                {!isPlatform && (
+                {isPlatform ? (
+                  <PlatformPlayground
+                    isFullscreen={isFullscreen}
+                    setIsFullscreen={setIsFullscreen}
+                  />
+                ) : (
                   <FlowPageSlidingContainerContent
                     isFullscreen={isFullscreen}
                     setIsFullscreen={setIsFullscreen}

@@ -63,6 +63,7 @@ import useAuthStore from "./authStore";
 import { useDarkStore } from "./darkStore";
 import useFlowConflictStore from "./flowConflictStore";
 import useFlowsManagerStore from "./flowsManagerStore";
+import { usePlaygroundStore } from "./playgroundStore";
 import { useTweaksStore } from "./tweaksStore";
 import { useTypesStore } from "./typesStore";
 import { useUtilityStore } from "./utilityStore";
@@ -202,6 +203,13 @@ const useFlowStore = create<FlowStoreType>((set, get) => ({
   buildingFlowId: null,
   buildingSessionId: null,
   stopBuilding: () => {
+    // 画布横幅及节点悬停的停止统一交给平台运行, 不提前结束或调用原生执行接口。
+    const actions = useAuthStore.getState().platformWorkflowActions;
+    if (actions != null) {
+      if (actions.includes("stop"))
+        usePlaygroundStore.getState().requestPlatformStop?.();
+      return;
+    }
     get().buildController.abort();
     get().updateEdgesRunningByNodes(
       get().nodes.map((n) => n.id),

@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { PlaygroundStoreType } from "@/types/zustand/playground";
 
 export const usePlaygroundStore = create<PlaygroundStoreType>((set) => ({
+  requestPlatformStop: null,
+  setRequestPlatformStop: (requestPlatformStop) => set({ requestPlatformStop }),
   isPlayground: false,
   setIsPlayground: (isPlayground: boolean) => set({ isPlayground }),
   isFullscreen: false,
@@ -14,5 +16,6 @@ export const usePlaygroundStore = create<PlaygroundStoreType>((set) => ({
     set({
       isFullscreen: false,
       isOpen: false,
+      requestPlatformStop: null,
     }),
 }));

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from langflow.api.utils import CurrentActiveUser, DbSession, release_db_transaction
 from langflow.api.v1.flow_conflict import parse_if_match
@@ -44,6 +44,8 @@ async def model_catalog(request: Request, current_user: CurrentActiveUser):
 
 class DryRunBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    input: str | None = Field(default=None, max_length=65536)
+    run_id: UUID = Field(default_factory=uuid4)
 
 
 @router.post("/{flow_id}/dry-run")
@@ -76,7 +78,9 @@ async def dry_run(
         raise HTTPException(409, "Saved flow version changed; reload before running")
     try:
         # 草稿与发布快照使用相同的受控节点适配, 但只读取本次已核对修订的草稿。
-        saved_graph = platform_execution.prepared_graph(deepcopy(flow.data))
+        if _body.input is not None and len(_body.input.encode()) > policy.MAX_TEXT_BYTES:
+            raise HTTPException(422, "文本输入不能超过 64 KiB。")
+        saved_graph = platform_execution.prepared_graph(deepcopy(flow.data), input_text=_body.input)
         output_ids = {
             node["id"] for node in saved_graph["nodes"] if node["data"]["type"] in {"TextOutput", "ChatOutput"}
         }
@@ -84,6 +88,8 @@ async def dry_run(
         connected = {edge["target"] for edge in saved_graph["edges"]}
         if len(inputs) > 1 or not output_ids or not output_ids.issubset(connected):
             raise HTTPException(422, "草稿调试最多支持一个文本入口, 且必须连接明确文本输出。")
+        if _body.input is not None and not inputs:
+            raise HTTPException(422, "该草稿没有可覆盖的文本入口。")
         uses_model = any(node["data"]["type"] == "PlatformModel" for node in saved_graph["nodes"])
     except (AttributeError, KeyError, TypeError) as exc:
         raise HTTPException(422, "Saved graph structure is invalid for text dry runs") from exc
@@ -92,8 +98,10 @@ async def dry_run(
     await release_db_transaction(session)
     if user_id in policy.ACTIVE_USERS:
         raise HTTPException(429, "A text dry run is already active for this user")
+    run_id = str(_body.run_id)
+    key = (user_id, str(flow_id), run_id)
+    platform_execution.claim_draft_run(key)
     policy.ACTIVE_USERS.add(user_id)
-    run_id = str(uuid4())
     sequence = 0
     try:
 
@@ -121,7 +129,12 @@ async def dry_run(
         execution = platform_execution.execute(
             saved_graph, invoke=invoke, flow_id=str(flow_id), user_id=user_id, run_id=run_id
         )
-        results = await asyncio.wait_for(execution, timeout=45 if uses_model else policy.TIMEOUT_SECONDS)
+        task = asyncio.create_task(execution)
+        platform_execution.ACTIVE[key] = task
+        if uses_model:
+            platform_execution.ACTIVE_MODELS.add(key)
+        platform_execution.emit("run_started", version_token=version, flow_id=str(flow_id))
+        results = await asyncio.wait_for(task, timeout=45 if uses_model else policy.TIMEOUT_SECONDS)
         outputs = [item for item in results if item["node_id"] in output_ids]
         if {item["node_id"] for item in outputs} != output_ids or any(
             not isinstance(item["text"], str) or len(item["text"].encode()) > policy.MAX_TEXT_BYTES for item in outputs
@@ -150,6 +163,8 @@ async def dry_run(
             "status": "succeeded",
             "outputs": outputs,
         }
+    except asyncio.CancelledError:
+        return {"status": "cancelled", "run_id": run_id, "outputs": []}
     except asyncio.TimeoutError as exc:
         raise HTTPException(
             504, {"code": "platform_dry_run_timeout", "message": "纯文本调试超时。请稍后重试。", "run_id": run_id}
@@ -172,4 +187,6 @@ async def dry_run(
             {"code": "platform_dry_run_failed", "message": "纯文本调试执行失败。请检查节点与连线。", "run_id": run_id},
         ) from exc
     finally:
+        platform_execution.ACTIVE.pop(key, None)
+        platform_execution.ACTIVE_MODELS.discard(key)
         policy.ACTIVE_USERS.discard(user_id)

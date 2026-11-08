@@ -481,6 +481,13 @@ async def run(flow_id: UUID, body: RunBody, request: Request, current_user: Curr
     if any(node["data"]["type"] == "PlatformModel" for node in graph["nodes"]):
         platform_execution.ACTIVE_MODELS.add(key)
     try:
+        platform_execution.emit(
+            "run_started",
+            flow_id=str(flow_id),
+            version_token=version,
+            publication_id=version,
+            publication_version=publication_version,
+        )
         outputs = await asyncio.wait_for(task, timeout=45)
         if not output_ids.issubset({output["node_id"] for output in outputs}):
             raise HTTPException(422, "发布流程未返回约定的输出, 不能认定运行成功。")

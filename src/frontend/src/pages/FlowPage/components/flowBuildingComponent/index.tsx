@@ -9,7 +9,9 @@ import { BorderTrail } from "@/components/core/border-trail";
 import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/TextShimmer";
 import { BuildStatus } from "@/constants/enums";
+import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
+import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { cn } from "@/utils/utils";
 import { getRunningNodeLabel } from "./helpers/get-running-node-label";
 import {
@@ -31,6 +33,11 @@ export default function FlowBuildingComponent() {
   const [duration, setDuration] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const stopBuilding = useFlowStore((state) => state.stopBuilding);
+  const actions = useAuthStore((state) => state.platformWorkflowActions);
+  const isPlatform = actions != null;
+  const requestPlatformStop = usePlaygroundStore(
+    (state) => state.requestPlatformStop,
+  );
   const prevIsBuilding = useRef(isBuilding);
   const startTimeRef = useRef<number | null>(null);
   const pastBuildFlowParams = useFlowStore(
@@ -112,10 +119,16 @@ export default function FlowBuildingComponent() {
   };
 
   const handleStop = () => {
+    // 平台画布与对话中的停止使用同一 run_id, 等服务端确认后再结束进度。
+    if (isPlatform) {
+      if (actions.includes("stop")) requestPlatformStop?.();
+      return;
+    }
     stopBuilding();
   };
 
   const handleRetry = () => {
+    if (isPlatform) return;
     if (pastBuildFlowParams) {
       buildFlow(pastBuildFlowParams);
     }
@@ -202,7 +215,11 @@ export default function FlowBuildingComponent() {
                                   exit="exit"
                                   transition={{ duration: 0.2 }}
                                 >
-                                  <Button size="sm" onClick={handleRetry}>
+                                  <Button
+                                    size="sm"
+                                    disabled={isPlatform}
+                                    onClick={handleRetry}
+                                  >
                                     {t("flowBuild.retry")}
                                   </Button>
                                 </motion.div>
@@ -238,6 +255,11 @@ export default function FlowBuildingComponent() {
                                   data-testid="stop_building_button"
                                   size="sm"
                                   onClick={handleStop}
+                                  disabled={
+                                    isPlatform &&
+                                    (!actions.includes("stop") ||
+                                      !requestPlatformStop)
+                                  }
                                 >
                                   {t("flowBuild.stop")}
                                 </Button>

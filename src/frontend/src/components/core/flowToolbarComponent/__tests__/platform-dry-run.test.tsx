@@ -1,15 +1,19 @@
 import {
   act,
   fireEvent,
-  render,
+  render as renderUI,
   screen,
   waitFor,
 } from "@testing-library/react";
+import { SimpleSidebarProvider } from "@/components/ui/simple-sidebar";
 import { api } from "@/controllers/API/api";
 import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import PlaygroundButton from "../components/playground-button";
+
+const render = (ui: React.ReactElement) =>
+  renderUI(<SimpleSidebarProvider>{ui}</SimpleSidebarProvider>);
 
 jest.mock("@/controllers/API/api", () => ({
   api: { post: jest.fn(), get: jest.fn() },
@@ -55,6 +59,16 @@ beforeEach(() => {
 afterEach(() =>
   useAuthStore.setState({ userData: null, platformWorkflowActions: null }),
 );
+
+it("keeps existing debug and run actions while adding the Playground entry", () => {
+  useAuthStore.setState({
+    platformWorkflowActions: ["read", "dry_run", "run"],
+  });
+  render(<PlaygroundButton hasIO />);
+  expect(screen.getByRole("button", { name: "Playground" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "纯文本调试" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "工作流运行" })).toBeEnabled();
+});
 
 it("runs and stops through independent platform actions using the same run ID", async () => {
   useAuthStore.setState({ platformWorkflowActions: ["read", "run", "stop"] });

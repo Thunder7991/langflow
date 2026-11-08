@@ -36,12 +36,23 @@ const PlaygroundButton = ({ hasIO }: PlaygroundButtonProps) => {
     (state) => state.platformWorkflowActions != null,
   );
   const currentFlowId = useFlowsManagerStore((state) => state.currentFlowId);
+  const canPlayground = useAuthStore(
+    (state) =>
+      !!state.platformWorkflowActions?.includes("read") &&
+      (state.platformWorkflowActions.includes("dry_run") ||
+        state.platformWorkflowActions.includes("run")),
+  );
   // Running a flow in the playground executes it → gate on the execute action.
   const canRun = can(currentFlowId, "execute");
 
   if (isPlatform)
     return (
       <>
+        {canPlayground && (
+          <SimpleSidebarTrigger>
+            <span>Playground</span>
+          </SimpleSidebarTrigger>
+        )}
         <PlatformDryRunButton />
         <PlatformDryRunButton action="run" />
       </>
