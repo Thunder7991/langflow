@@ -114,6 +114,15 @@ export default function Dropdown({
   ]);
   const visibleValue =
     isLegacyProviderSelector && !policyOptions.includes(value) ? "" : value;
+  // 企业模型用安全目录名称展示, 选项值和保存请求仍保持真实模型记录 ID。
+  const useModelLabels =
+    (baseInputProps.nodeInformationMetadata?.nodeType === "platformmodel" ||
+      (Boolean(nodeClass?.template?.selection_mode) &&
+        Boolean(nodeClass?.template?.connection_model_id))) &&
+    (name === "selection_mode" || name === "connection_model_id");
+  const selectedLabel = useModelLabels
+    ? policyOptionsMetaData?.[policyOptions.indexOf(visibleValue)]?.description
+    : undefined;
   const validOptions = useMemo(
     () => filterNullOptions(policyOptions),
     [policyOptions, visibleValue],
@@ -254,6 +263,7 @@ export default function Dropdown({
           />
         )}
         <DropdownOptionsList
+          useModelLabels={useModelLabels}
           filteredOptions={visibleFilteredOptions}
           filteredMetadata={visibleFilteredMetadata}
           firstWord={firstWord}
@@ -338,11 +348,14 @@ export default function Dropdown({
               className="h-4 w-4 flex-shrink-0"
             />
           )}
-          <span className="truncate text-sm">{visibleValue}</span>
+          <span className="truncate text-sm">
+            {selectedLabel || visibleValue}
+          </span>
         </div>
       ) : (
         <div className="w-full truncate">
           <DropdownTrigger
+            selectedLabel={selectedLabel}
             disabled={disabled}
             validOptions={validOptions}
             combobox={combobox}

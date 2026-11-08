@@ -11,7 +11,9 @@ import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import PlaygroundButton from "../components/playground-button";
 
-jest.mock("@/controllers/API/api", () => ({ api: { post: jest.fn() } }));
+jest.mock("@/controllers/API/api", () => ({
+  api: { post: jest.fn(), get: jest.fn() },
+}));
 jest.mock("@/contexts/permissionsContext", () => ({
   usePermissions: () => ({ can: () => false }),
 }));
@@ -29,6 +31,12 @@ const saved = {
 };
 beforeEach(() => {
   jest.clearAllMocks();
+  (api.get as jest.Mock).mockResolvedValue({
+    data: {
+      status: "published",
+      current: { id: "published-version", version_number: 1 },
+    },
+  });
   useAuthStore.setState({
     userData: { id: "owner" } as never,
     platformWorkflowActions: ["read", "dry_run"],
@@ -63,7 +71,10 @@ it("runs and stops through independent platform actions using the same run ID", 
     screen.queryByRole("button", { name: "纯文本调试" }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "工作流运行" }));
-  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "开始运行" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "开始运行" }));
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   const runId = (api.post as jest.Mock).mock.calls[0][1].run_id;
   expect(runId).toMatch(/^[a-f0-9-]{36}$/);
@@ -263,5 +274,47 @@ it("warns that an uncertain model failure can still be billed", async () => {
     "重复运行可能再次计费",
   );
   expect(api.post).toHaveBeenCalledTimes(1);
+  view.unmount();
+});
+
+it.each([
+  ["TENANT_DEFAULT_UNSET", "企业默认模型未设置。"],
+  ["MODEL_UNAVAILABLE", "企业模型或所属渠道不可用。"],
+])(
+  "reports catalog state %s separately from a flow version conflict",
+  async (code, message) => {
+    (api.post as jest.Mock).mockRejectedValue({
+      response: { status: 409, data: { detail: { code, message } } },
+    });
+    const view = render(<PlaygroundButton hasIO />);
+    fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
+    fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByText(/服务端流程版本已变化/)).not.toBeInTheDocument();
+    expect(api.post).toHaveBeenCalledTimes(1);
+    view.unmount();
+  },
+);
+
+it("explains a discarded response when the saved revision changes before the rendered selector catches up", async () => {
+  (api.post as jest.Mock).mockResolvedValue({
+    data: {
+      status: "succeeded",
+      flow_id: saved.id,
+      version_token: saved.version_token,
+      outputs: [{ node_id: "out", text: "outdated private result" }],
+    },
+  });
+  const view = render(<PlaygroundButton hasIO />);
+  fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
+  const state = useFlowsManagerStore.getState();
+  const latest = jest.spyOn(useFlowsManagerStore, "getState").mockReturnValue({
+    ...state,
+    currentFlow: { ...saved, version_token: "new-revision" } as never,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("草稿版本已变化");
+  expect(screen.queryByText("outdated private result")).not.toBeInTheDocument();
+  latest.mockRestore();
   view.unmount();
 });

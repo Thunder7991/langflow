@@ -18,6 +18,7 @@ import {
 } from "../helpers/dropdown-search";
 
 export function DropdownOptionsList({
+  useModelLabels = false,
   filteredOptions,
   filteredMetadata,
   firstWord,
@@ -37,6 +38,7 @@ export function DropdownOptionsList({
   nodeId,
   nodeClass,
 }: {
+  useModelLabels?: boolean;
   filteredOptions: string[];
   // biome-ignore lint/suspicious/noExplicitAny: legacy
   filteredMetadata: Record<string, any>[] | undefined;
@@ -114,7 +116,9 @@ export function DropdownOptionsList({
                       })}
                     >
                       <div className="text-[13px] mr-2 whitespace-nowrap flex-shrink-0">
-                        {option}
+                        {useModelLabels
+                          ? filteredMetadata?.[index]?.description || option
+                          : option}
                       </div>
                       {filteredMetadata?.[index]?.status && (
                         <span
@@ -130,36 +134,40 @@ export function DropdownOptionsList({
                         </span>
                       )}
 
-                      {filteredMetadata && filteredMetadata?.length > 0 && (
-                        <div className="ml-auto flex items-center overflow-hidden pl-2 text-muted-foreground">
-                          {Object.entries(
-                            filterMetadataKeys(filteredMetadata?.[index] || {}),
-                          )
-                            .filter(
-                              ([key, value]) =>
-                                value !== null && key !== "icon",
+                      {!useModelLabels &&
+                        filteredMetadata &&
+                        filteredMetadata?.length > 0 && (
+                          <div className="ml-auto flex items-center overflow-hidden pl-2 text-muted-foreground">
+                            {Object.entries(
+                              filterMetadataKeys(
+                                filteredMetadata?.[index] || {},
+                              ),
                             )
-                            .map(([key, value], i, arr) => (
-                              <div
-                                key={key}
-                                className={cn("flex items-center", {
-                                  "flex-1 overflow-hidden":
-                                    i === arr.length - 1,
-                                })}
-                              >
-                                {i > 0 && (
-                                  <ForwardedIconComponent
-                                    name="Circle"
-                                    className="mx-1 h-1 w-1 flex-shrink-0 overflow-visible fill-muted-foreground"
-                                  />
-                                )}
-                                <div className="text-xs truncate">
-                                  {`${String(value)} ${key}`}
+                              .filter(
+                                ([key, value]) =>
+                                  value !== null && key !== "icon",
+                              )
+                              .map(([key, value], i, arr) => (
+                                <div
+                                  key={key}
+                                  className={cn("flex items-center", {
+                                    "flex-1 overflow-hidden":
+                                      i === arr.length - 1,
+                                  })}
+                                >
+                                  {i > 0 && (
+                                    <ForwardedIconComponent
+                                      name="Circle"
+                                      className="mx-1 h-1 w-1 flex-shrink-0 overflow-visible fill-muted-foreground"
+                                    />
+                                  )}
+                                  <div className="text-xs truncate">
+                                    {`${String(value)} ${key}`}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
-                        </div>
-                      )}
+                              ))}
+                          </div>
+                        )}
                       <div
                         className={cn("pl-2", {
                           "ml-auto":

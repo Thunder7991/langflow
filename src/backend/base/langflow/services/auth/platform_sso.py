@@ -381,6 +381,7 @@ class PlatformSsoMiddleware:
                 "user_id": claims["sub"],
                 "recheck": recheck,
                 "model_call": model_call,
+                "model_settings": self.settings,
                 "host_origin": self.settings.host_origin.rstrip("/"),
             }
             method = scope["method"]

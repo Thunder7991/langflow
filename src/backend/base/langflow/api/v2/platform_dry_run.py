@@ -2,7 +2,7 @@
 
 import asyncio
 from copy import deepcopy
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 from langflow.api.utils import CurrentActiveUser, DbSession, release_db_transaction
 from langflow.api.v1.flow_conflict import parse_if_match
 from langflow.services.auth import platform_dry_run as policy
+from langflow.services.auth import platform_execution
 from langflow.services.auth.platform_workflows import (
     context,
     require_action,
@@ -31,7 +32,10 @@ async def model_catalog(request: Request, current_user: CurrentActiveUser):
         raise HTTPException(403, "Platform models require platform SSO")
     require_action(request, "read")
     try:
-        return await identity["model_call"]("catalog", {})
+        from langflow.services.auth.platform_models import ensure_inventory
+
+        await ensure_inventory(request)
+        return await identity["model_call"]("catalog", {"catalogVersion": 2})
     except HTTPException as exc:
         from langflow.services.auth.platform_models import session_failure
 
@@ -70,14 +74,17 @@ async def dry_run(
         raise HTTPException(428, "Dry run requires If-Match of the saved version")
     if flow.version_token is None or expected != flow.version_token:
         raise HTTPException(409, "Saved flow version changed; reload before running")
-    model_spec = None
     try:
-        saved_graph = deepcopy(flow.data)
-        if isinstance(saved_graph, dict) and len(saved_graph.get("nodes", [])) == 3:  # noqa: PLR2004 - input, model, output
-            source, target, text, model_id, configuration = policy.model_chain(saved_graph)
-            model_spec = (model_id, configuration)
-        else:
-            source, target, text = policy.text_pair(saved_graph)
+        # 草稿与发布快照使用相同的受控节点适配, 但只读取本次已核对修订的草稿。
+        saved_graph = platform_execution.prepared_graph(deepcopy(flow.data))
+        output_ids = {
+            node["id"] for node in saved_graph["nodes"] if node["data"]["type"] in {"TextOutput", "ChatOutput"}
+        }
+        inputs = [node for node in saved_graph["nodes"] if node["data"]["type"] in {"TextInput", "ChatInput"}]
+        connected = {edge["target"] for edge in saved_graph["edges"]}
+        if len(inputs) > 1 or not output_ids or not output_ids.issubset(connected):
+            raise HTTPException(422, "草稿调试最多支持一个文本入口, 且必须连接明确文本输出。")
+        uses_model = any(node["data"]["type"] == "PlatformModel" for node in saved_graph["nodes"])
     except (AttributeError, KeyError, TypeError) as exc:
         raise HTTPException(422, "Saved graph structure is invalid for text dry runs") from exc
     version = str(flow.version_token)
@@ -87,25 +94,39 @@ async def dry_run(
         raise HTTPException(429, "A text dry run is already active for this user")
     policy.ACTIVE_USERS.add(user_id)
     run_id = str(uuid4())
+    sequence = 0
     try:
-        if model_spec:
 
-            async def invoke(**parameters):
-                result = await identity["model_call"](
-                    "invoke", {**parameters, "flowId": str(flow_id), "versionToken": version, "runId": run_id}
-                )
-                if result.get("runId") != run_id:
-                    raise HTTPException(502, "平台模型运行标识不匹配。")
-                return result
+        async def invoke(**parameters):
+            nonlocal sequence
+            if "dry_run" not in await identity["recheck"]():
+                raise HTTPException(403, "Text dry run permission was revoked")
+            # 模型节点共用执行上下文, 每次供应商调用单独防重, 避免第二个节点被当成重复请求。
+            sequence += 1
+            model_run_id = str(uuid5(UUID(run_id), str(sequence)))
+            result = await identity["model_call"](
+                "invoke",
+                {
+                    **parameters,
+                    "flowId": str(flow_id),
+                    "versionToken": version,
+                    "runId": model_run_id,
+                    "executionId": run_id,
+                },
+            )
+            if result.get("runId") != model_run_id:
+                raise HTTPException(502, "平台模型运行标识不匹配。")
+            return result
 
-            execution = policy.execute_model_chain(
-                source, target, text, *model_spec, invoke=invoke, flow_id=str(flow_id), user_id=user_id, run_id=run_id
-            )
-        else:
-            execution = policy.execute_text_pair(
-                source, target, text, flow_id=str(flow_id), user_id=user_id, run_id=run_id
-            )
-        output = await asyncio.wait_for(execution, timeout=45 if model_spec else policy.TIMEOUT_SECONDS)
+        execution = platform_execution.execute(
+            saved_graph, invoke=invoke, flow_id=str(flow_id), user_id=user_id, run_id=run_id
+        )
+        results = await asyncio.wait_for(execution, timeout=45 if uses_model else policy.TIMEOUT_SECONDS)
+        outputs = [item for item in results if item["node_id"] in output_ids]
+        if {item["node_id"] for item in outputs} != output_ids or any(
+            not isinstance(item["text"], str) or len(item["text"].encode()) > policy.MAX_TEXT_BYTES for item in outputs
+        ):
+            raise HTTPException(422, "草稿未返回完整文本输出或输出超过 64 KiB。")
         # 不把运行期间已经失效的会话结果重新交给浏览器。
         try:
             current_actions = await identity["recheck"]()
@@ -127,14 +148,14 @@ async def dry_run(
             "flow_id": str(flow_id),
             "version_token": version,
             "status": "succeeded",
-            "outputs": [{"node_id": target, "text": output}],
+            "outputs": outputs,
         }
     except asyncio.TimeoutError as exc:
         raise HTTPException(
             504, {"code": "platform_dry_run_timeout", "message": "纯文本调试超时。请稍后重试。", "run_id": run_id}
         ) from exc
     except HTTPException as exc:
-        if model_spec and exc.status_code != status.HTTP_401_UNAUTHORIZED:
+        if uses_model and exc.status_code != status.HTTP_401_UNAUTHORIZED:
             detail = (
                 exc.detail
                 if isinstance(exc.detail, dict)

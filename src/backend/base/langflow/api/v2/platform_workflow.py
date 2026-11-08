@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Annotated
 from uuid import UUID, uuid4, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from langflow.api.utils import CurrentActiveUser, DbSession
@@ -236,23 +236,122 @@ async def duplicate(
 class PublishBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     published: bool
+    publication_token: UUID | None
+
+
+class PublicationSwitchBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    publication_token: UUID
+
+
+@router.get("/flows/{flow_id}/publication")
+async def publication_status(flow_id: UUID, request: Request, current_user: CurrentActiveUser, session: DbSession):
+    from langflow.services.auth.platform_publications import state_response
+
+    return await state_response(session, await owned(request, session, flow_id, current_user, "read"))
+
+
+@router.get("/flows/{flow_id}/publications")
+async def publications(
+    flow_id: UUID,
+    request: Request,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    from sqlalchemy import func
+    from sqlmodel import select
+
+    from langflow.services.auth.platform_publications import metadata
+    from langflow.services.database.models.workflow_publication import WorkflowPublication
+
+    await owned(request, session, flow_id, current_user, "read")
+    query = select(WorkflowPublication).where(WorkflowPublication.flow_id == flow_id)
+    rows = (
+        await session.exec(query.order_by(WorkflowPublication.version_number.desc()).offset(offset).limit(limit))
+    ).all()
+    total = (
+        await session.exec(
+            select(func.count()).select_from(WorkflowPublication).where(WorkflowPublication.flow_id == flow_id)
+        )
+    ).one()
+    return {"items": [metadata(row) for row in rows], "total": total}
 
 
 @router.post("/flows/{flow_id}/publish")
 async def publish(
     flow_id: UUID, body: PublishBody, request: Request, current_user: CurrentActiveUser, session: DbSession
 ):
-    from langflow.services.database.models.flow.model import AccessTypeEnum
+    from langflow.api.v1.flow_conflict import parse_if_match
+    from langflow.services.auth import platform_publications
+    from langflow.services.auth.platform_actions import validate_graph_references
+    from langflow.services.database.models.workflow_publication import WorkflowPublication
 
     flow = await owned(request, session, flow_id, current_user, "publish")
     await ensure_flow_permission(
         current_user, FlowAction.WRITE, flow_id=flow.id, flow_user_id=flow.user_id, folder_id=flow.folder_id
     )
-    # 发布采用 Langflow 现有 PUBLIC 标识;实例 SSO 仍生效,不提供匿名执行旁路。
-    flow.access_type = AccessTypeEnum.PUBLIC if body.published else AccessTypeEnum.PRIVATE
-    session.add(flow)
+    await platform_publications.lock_flow(session, flow)
+    state = await platform_publications.check_state(session, flow, body.publication_token)
+    if not body.published:
+        if state is None or state.publication_id is None:
+            raise HTTPException(409, "流程当前没有线上版本。")
+        if "publish" not in await context(request)["recheck"]():
+            raise HTTPException(403, "Publish permission revoked")
+        return await platform_publications.switch(session, flow, current_user, state, None, "offline")
+    expected = parse_if_match(request.headers.get("if-match"))
+    if expected is None:
+        raise HTTPException(428, "发布必须指定已保存的草稿修订。")
+    if expected != flow.version_token:
+        raise HTTPException(409, "草稿已变化, 请保存并刷新后再发布。")
+    schemas = platform_publications.validate_release(flow.data)
+    await validate_graph_references(request, session, flow.data, current_user.id, require_model_use=True)
+    if "publish" not in await context(request)["recheck"]():
+        raise HTTPException(403, "Publish permission revoked")
+    release = WorkflowPublication(
+        flow_id=flow.id,
+        version_number=(state.latest_version if state else 0) + 1,
+        source_version_token=flow.version_token,
+        data=deepcopy(flow.data),
+        digest=platform_publications.digest(flow.data),
+        input_schema=schemas[0],
+        output_schema=schemas[1],
+        dependencies=schemas[2],
+        created_by=current_user.id,
+    )
+    session.add(release)
     await session.flush()
-    return export_flow(flow)
+    return await platform_publications.switch(session, flow, current_user, state, release, "publish")
+
+
+@router.post("/flows/{flow_id}/publications/{publication_id}/activate")
+async def rollback_publication(
+    flow_id: UUID,
+    publication_id: UUID,
+    body: PublicationSwitchBody,
+    request: Request,
+    current_user: CurrentActiveUser,
+    session: DbSession,
+):
+    from langflow.services.auth import platform_publications
+    from langflow.services.auth.platform_actions import validate_graph_references
+    from langflow.services.database.models.workflow_publication import WorkflowPublication
+
+    flow = await owned(request, session, flow_id, current_user, "publish")
+    await ensure_flow_permission(
+        current_user, FlowAction.WRITE, flow_id=flow.id, flow_user_id=flow.user_id, folder_id=flow.folder_id
+    )
+    await platform_publications.lock_flow(session, flow)
+    state = await platform_publications.check_state(session, flow, body.publication_token)
+    release = await session.get(WorkflowPublication, publication_id)
+    if release is None or release.flow_id != flow.id:
+        raise HTTPException(404, "Publication not found")
+    platform_publications.validate_release(release.data)
+    await validate_graph_references(request, session, release.data, current_user.id, require_model_use=True)
+    if "publish" not in await context(request)["recheck"]():
+        raise HTTPException(403, "Publish permission revoked")
+    return await platform_publications.switch(session, flow, current_user, state, release, "rollback")
 
 
 @router.get("/flows/{flow_id}/share")
@@ -266,15 +365,22 @@ async def share(flow_id: UUID, request: Request, current_user: CurrentActiveUser
 
 @router.get("/flows/{flow_id}/api")
 async def api_configuration(flow_id: UUID, request: Request, current_user: CurrentActiveUser, session: DbSession):
+    from langflow.services.auth.platform_publications import state_response
+
     flow = await owned(request, session, flow_id, current_user, "api_access")
+    publication = await state_response(session, flow)
+    example = {"run_id": str(uuid4())}
+    if publication["current"] and publication["current"]["input_schema"]["nodes"]:
+        example["input"] = "业务文本输入"
     return {
         "method": "POST",
         "path": f"{request.scope.get('root_path', '')}/api/v2/platform-workflow/flows/{flow.id}/run",
         "authentication": "platform_sso",
         "credentials": "include",
         "required_action": "run",
-        "headers": {"If-Match": str(flow.version_token)},
-        "body": {"input": "待调试的文本"},
+        "publication": publication,
+        "body": example,
+        "run_id_policy": "每次运行使用新的 UUID, 相同 ID 不重复执行。",
     }
 
 
@@ -288,31 +394,67 @@ class RunBody(BaseModel):
 async def run(flow_id: UUID, body: RunBody, request: Request, current_user: CurrentActiveUser, session: DbSession):
     import asyncio
 
+    from sqlalchemy.exc import IntegrityError
+
     from langflow.api.utils import release_db_transaction
     from langflow.api.v1.flow_conflict import parse_if_match
     from langflow.services.auth import platform_execution
     from langflow.services.auth.platform_dry_run import ACTIVE_USERS
+    from langflow.services.auth.platform_publications import lock_flow
+    from langflow.services.database.models.workflow_publication import (
+        WorkflowPublication,
+        WorkflowPublicationRun,
+        WorkflowPublicationState,
+    )
 
     flow = await owned(request, session, flow_id, current_user, "run")
     await ensure_flow_permission(
         current_user, FlowAction.EXECUTE, flow_id=flow.id, flow_user_id=flow.user_id, folder_id=flow.folder_id
     )
+    await lock_flow(session, flow)
+    state = await session.get(WorkflowPublicationState, flow.id, populate_existing=True)
+    if state is None or state.publication_id is None:
+        raise HTTPException(409, "流程未发布或已下线, 不能业务执行。")
+    release = await session.get(WorkflowPublication, state.publication_id)
+    if release is None or release.flow_id != flow.id:
+        raise HTTPException(409, "线上版本不可用, 不能回退到草稿。")
     expected = parse_if_match(request.headers.get("if-match"))
-    if expected is None:
-        raise HTTPException(428, "Run requires If-Match")
-    if expected != flow.version_token:
-        raise HTTPException(409, "Saved version changed; reload before running")
+    if expected is not None and expected != release.id:
+        raise HTTPException(409, "线上版本已变化, 请重新确认后执行。")
     if body.input is not None and len(body.input.encode()) > MAX_INPUT_BYTES:
         raise HTTPException(422, "Input exceeds 64 KiB")
-    graph = platform_execution.prepared_graph(deepcopy(flow.data), input_text=body.input)
+    if body.input is not None and not release.input_schema["nodes"]:
+        raise HTTPException(422, "该发布版本没有可覆盖的文本入口。")
+    graph = platform_execution.prepared_graph(deepcopy(release.data), input_text=body.input)
     identity = context(request)
-    actor, version, run_id = str(current_user.id), str(flow.version_token), str(body.run_id)
-    await release_db_transaction(session)
+    actor, version, run_id = str(current_user.id), str(release.id), str(body.run_id)
+    publication_version = release.version_number
+    output_ids = set(release.output_schema["nodes"])
     if actor in ACTIVE_USERS:
         raise HTTPException(429, "A workflow run is already active")
-    key = (actor, str(flow_id), run_id)
+    # 检查和占用之间不等待数据库, 避免同一 worker 的并发请求都通过限流检查。
     ACTIVE_USERS.add(actor)
+    session.add(WorkflowPublicationRun(id=body.run_id, publication_id=release.id, created_by=current_user.id))
+    try:
+        # 先持久化受理记录和快照引用, 再执行模型; 跨 worker 重复 ID 也不能再次扣费。
+        await release_db_transaction(session)
+    except IntegrityError as exc:
+        ACTIVE_USERS.discard(actor)
+        await session.rollback()
+        raise HTTPException(
+            409,
+            {
+                "code": "workflow_run_accepted",
+                "message": "运行 ID 已受理, 请查询原运行, 不要自动重试。",
+                "run_id": run_id,
+            },
+        ) from exc
+    except BaseException:
+        ACTIVE_USERS.discard(actor)
+        raise
+    key = (actor, str(flow_id), run_id)
     sequence = 0
+    outcome = "failed"
 
     async def invoke(**parameters):
         nonlocal sequence
@@ -340,16 +482,22 @@ async def run(flow_id: UUID, body: RunBody, request: Request, current_user: Curr
         platform_execution.ACTIVE_MODELS.add(key)
     try:
         outputs = await asyncio.wait_for(task, timeout=45)
+        if not output_ids.issubset({output["node_id"] for output in outputs}):
+            raise HTTPException(422, "发布流程未返回约定的输出, 不能认定运行成功。")
         if "run" not in await identity["recheck"]():
             raise HTTPException(403, "Run permission revoked")
+        outcome = "succeeded"
         return {
             "status": "succeeded",
             "run_id": run_id,
             "flow_id": str(flow_id),
             "version_token": version,
-            "outputs": outputs,
+            "publication_id": version,
+            "publication_version": publication_version,
+            "outputs": [output for output in outputs if output["node_id"] in output_ids],
         }
     except asyncio.CancelledError:
+        outcome = "cancelled"
         return {"status": "cancelled", "run_id": run_id, "outputs": []}
     except TimeoutError as exc:
         raise HTTPException(504, "Workflow execution timed out; model billing may already have occurred") from exc
@@ -361,6 +509,30 @@ async def run(flow_id: UUID, body: RunBody, request: Request, current_user: Curr
         platform_execution.ACTIVE.pop(key, None)
         platform_execution.ACTIVE_MODELS.discard(key)
         ACTIVE_USERS.discard(actor)
+        from datetime import datetime, timezone
+
+        from sqlmodel import update
+
+        await session.exec(
+            update(WorkflowPublicationRun)
+            .where(WorkflowPublicationRun.id == body.run_id)
+            .values(status=outcome, finished_at=datetime.now(timezone.utc))
+        )
+        await session.commit()
+
+
+@router.get("/flows/{flow_id}/runs/{run_id}")
+async def run_status(
+    flow_id: UUID, run_id: UUID, request: Request, current_user: CurrentActiveUser, session: DbSession
+):
+    from langflow.services.database.models.workflow_publication import WorkflowPublication, WorkflowPublicationRun
+
+    await owned(request, session, flow_id, current_user, "run")
+    record = await session.get(WorkflowPublicationRun, run_id)
+    release = await session.get(WorkflowPublication, record.publication_id) if record else None
+    if record is None or release is None or record.created_by != current_user.id or release.flow_id != flow_id:
+        raise HTTPException(404, "Run not found")
+    return {**record.model_dump(mode="json"), "flow_id": str(flow_id), "publication_version": release.version_number}
 
 
 @router.post("/flows/{flow_id}/runs/{run_id}/stop")

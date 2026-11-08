@@ -16,11 +16,11 @@ from tests.unit.api.v1.test_platform_sso_editing import (
 )
 
 
-async def text_flow(client, text="B5 真实文本执行"):
+async def text_flow(client, text="B5 真实文本执行", *, input_type="TextInput", output_type="TextOutput"):
     nodes = []
-    for name in ["TextInput", "TextOutput"]:
+    for name in [input_type, output_type]:
         node = await builtin(client, name)
-        node["template"]["input_value"]["value"] = text if name == "TextInput" else ""
+        node["template"]["input_value"]["value"] = text if name == input_type else ""
         nodes.append(
             {
                 "id": f"{name}-b5",
@@ -31,11 +31,17 @@ async def text_flow(client, text="B5 真实文本执行"):
         )
     edge = {
         "id": "text-edge",
-        "source": "TextInput-b5",
-        "target": "TextOutput-b5",
-        "sourceHandle": json.dumps({"id": "TextInput-b5", "name": "text", "output_types": ["Message"]}),
+        "source": f"{input_type}-b5",
+        "target": f"{output_type}-b5",
+        "sourceHandle": json.dumps(
+            {
+                "id": f"{input_type}-b5",
+                "name": nodes[0]["data"]["node"]["outputs"][0]["name"],
+                "output_types": ["Message"],
+            }
+        ),
         "targetHandle": json.dumps(
-            {"id": "TextOutput-b5", "fieldName": "input_value", "type": "str", "inputTypes": ["Message"]}
+            {"id": f"{output_type}-b5", "fieldName": "input_value", "type": "str", "inputTypes": ["Message"]}
         ),
     }
     response = await client.post("/api/v1/flows/", json={"name": "b5-text", "data": {"nodes": nodes, "edges": [edge]}})
@@ -64,6 +70,29 @@ async def test_saved_text_graph_executes_without_changing_flow(editor):
     restored = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
     assert restored["data"] == flow["data"]
     assert restored["version_token"] == flow["version_token"]
+
+
+@pytest.mark.parametrize(
+    ("input_type", "output_type"),
+    [("ChatInput", "ChatOutput"), ("ChatInput", "TextOutput"), ("TextInput", "ChatOutput")],
+)
+async def test_chat_nodes_debug_saved_draft_without_storing_history(editor, input_type, output_type):
+    from sqlalchemy import text
+
+    client, _, live = editor
+    flow = await text_flow(client, "草稿独立调试 0", input_type=input_type, output_type=output_type)
+    live["actions"].append("dry_run")
+    response = await run(client, flow)
+    assert response.status_code == 200, response.text
+    assert response.json()["outputs"] == [{"node_id": f"{output_type}-b5", "text": "草稿独立调试 0"}]
+    restored = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
+    assert restored["data"] == flow["data"]
+    assert restored["version_token"] == flow["version_token"]
+    async with session_scope() as session:
+        count = await session.execute(
+            text("SELECT count(*) FROM message WHERE flow_id = :flow"), {"flow": UUID(flow["id"]).hex}
+        )
+        assert count.scalar_one() == 0
 
 
 @pytest.mark.parametrize("text", ["", "0", "换行\n中文"])
@@ -115,7 +144,7 @@ async def test_precondition_and_extra_payload_cannot_run_a_different_graph(edito
     ],
 )
 async def test_unsafe_saved_graph_is_refused_before_execution(editor, monkeypatch, attack, expected):
-    from langflow.services.auth import platform_dry_run
+    from langflow.services.auth import platform_execution
 
     client, _, live = editor
     flow = await text_flow(client)
@@ -145,7 +174,7 @@ async def test_unsafe_saved_graph_is_refused_before_execution(editor, monkeypatc
     async def forbidden_execution(*_args, **_kwargs):
         pytest.fail("Invalid saved graph reached the runtime")
 
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", forbidden_execution)
+    monkeypatch.setattr(platform_execution, "execute", forbidden_execution)
     live["actions"].append("dry_run")
     response = await run(client, flow)
     assert response.status_code == expected, response.text
@@ -192,18 +221,18 @@ async def test_csrf_and_stream_options_remain_closed(editor):
 async def test_runtime_failure_and_timeout_release_the_user_slot(editor, monkeypatch):
     import asyncio
 
-    from langflow.services.auth import platform_dry_run
+    from langflow.services.auth import platform_dry_run, platform_execution
 
     client, _, live = editor
     flow = await text_flow(client)
     live["actions"].append("dry_run")
-    original = platform_dry_run.execute_text_pair
+    original = platform_execution.execute
 
     async def fail(*_args, **_kwargs):
         message = "internal secret trace must not be returned"
         raise RuntimeError(message)
 
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", fail)
+    monkeypatch.setattr(platform_execution, "execute", fail)
     response = await run(client, flow)
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "platform_dry_run_failed"
@@ -213,22 +242,22 @@ async def test_runtime_failure_and_timeout_release_the_user_slot(editor, monkeyp
         await asyncio.sleep(1)
         return "late"
 
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", slow)
+    monkeypatch.setattr(platform_execution, "execute", slow)
     monkeypatch.setattr(platform_dry_run, "TIMEOUT_SECONDS", 0.01)
     assert (await run(client, flow)).status_code == 504
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", original)
+    monkeypatch.setattr(platform_execution, "execute", original)
     monkeypatch.setattr(platform_dry_run, "TIMEOUT_SECONDS", 10)
     assert (await run(client, flow)).status_code == 200
 
 
 @pytest.mark.parametrize("session_expired", [False, True])
 async def test_revoked_access_does_not_return_completed_private_output(editor, monkeypatch, session_expired):
-    from langflow.services.auth import platform_dry_run
+    from langflow.services.auth import platform_execution
 
     client, _, live = editor
     flow = await text_flow(client)
     live["actions"].append("dry_run")
-    original = platform_dry_run.execute_text_pair
+    original = platform_execution.execute
 
     async def revoke(*args, **kwargs):
         value = await original(*args, **kwargs)
@@ -238,7 +267,7 @@ async def test_revoked_access_does_not_return_completed_private_output(editor, m
             live["actions"] = ["read"]
         return value
 
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", revoke)
+    monkeypatch.setattr(platform_execution, "execute", revoke)
     response = await run(client, flow)
     assert response.status_code == (401 if session_expired else 403)
     assert "B5 真实文本执行" not in response.text
@@ -250,20 +279,20 @@ async def test_revoked_access_does_not_return_completed_private_output(editor, m
 async def test_overlapping_requests_for_one_user_are_not_queued(editor, monkeypatch):
     import asyncio
 
-    from langflow.services.auth import platform_dry_run
+    from langflow.services.auth import platform_execution
 
     client, _, live = editor
     flow = await text_flow(client)
     live["actions"].append("dry_run")
     started, release = asyncio.Event(), asyncio.Event()
-    original = platform_dry_run.execute_text_pair
+    original = platform_execution.execute
 
     async def wait_for_release(*args, **kwargs):
         started.set()
         await release.wait()
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(platform_dry_run, "execute_text_pair", wait_for_release)
+    monkeypatch.setattr(platform_execution, "execute", wait_for_release)
     first = asyncio.create_task(run(client, flow))
     try:
         await asyncio.wait_for(started.wait(), timeout=5)

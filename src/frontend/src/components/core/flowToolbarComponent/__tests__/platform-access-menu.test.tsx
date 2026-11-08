@@ -5,7 +5,14 @@ let mockAuth = {
   userData: { id: "owner" },
   platformWorkflowActions: ["read", "publish", "share", "api_access"],
 };
-const mockFlow = { id: "flow", user_id: "owner", access_type: "PRIVATE" };
+const mockFlow = {
+  id: "flow",
+  user_id: "owner",
+  access_type: "PRIVATE",
+  version_token: "draft",
+  name: "flow",
+  data: { nodes: [], edges: [] },
+};
 const mockPost = jest.fn();
 const mockGet = jest.fn();
 jest.mock("@/stores/authStore", () => ({
@@ -17,8 +24,35 @@ jest.mock("@/stores/authStore", () => ({
 }));
 jest.mock("@/stores/flowsManagerStore", () => ({
   __esModule: true,
-  default: (selector: (state: { currentFlow: typeof mockFlow }) => unknown) =>
-    selector({ currentFlow: mockFlow }),
+  default: Object.assign(
+    (selector: (state: { currentFlow: typeof mockFlow }) => unknown) =>
+      selector({ currentFlow: mockFlow }),
+    { getState: () => ({ currentFlow: mockFlow }) },
+  ),
+}));
+jest.mock("@/hooks/flows/use-autosave-flow", () => ({
+  __esModule: true,
+  default: () => ({ enqueue: async () => undefined }),
+}));
+jest.mock("@/stores/flowStore", () => ({
+  __esModule: true,
+  default: Object.assign(
+    (selector: (state: unknown) => unknown) =>
+      selector({
+        currentFlow: mockFlow,
+        nodes: [],
+        edges: [],
+        userEditedSinceLoad: false,
+      }),
+    {
+      getState: () => ({
+        currentFlow: mockFlow,
+        nodes: [],
+        edges: [],
+        userEditedSinceLoad: false,
+      }),
+    },
+  ),
 }));
 jest.mock("@/controllers/API/api", () => ({
   api: {
@@ -38,33 +72,20 @@ beforeEach(() => {
   };
 });
 
-it("publishes and reverses state through the authorized endpoint", async () => {
-  mockPost
-    .mockResolvedValueOnce({ data: { access_type: "PUBLIC" } })
-    .mockResolvedValueOnce({ data: { access_type: "PRIVATE" } });
-  render(<PlatformAccessMenu />);
-  fireEvent.click(screen.getByTestId("platform-access-menu-button"));
-  await act(async () => fireEvent.click(screen.getByText("设置为发布状态")));
-  expect(mockPost).toHaveBeenCalledWith(
-    "/api/v2/platform-workflow/flows/flow/publish",
-    { published: true },
-  );
-  await act(async () => fireEvent.click(screen.getByText("取消发布")));
-  expect(mockPost).toHaveBeenLastCalledWith(
-    "/api/v2/platform-workflow/flows/flow/publish",
-    { published: false },
-  );
-  expect(screen.getByText("已取消发布。")).toBeInTheDocument();
-});
-
 it("offers only granted access actions and displays the authenticated link", async () => {
   mockAuth.platformWorkflowActions = ["read", "share"];
-  mockGet.mockResolvedValue({
-    data: { url: "https://workflow.example/flow/flow" },
-  });
+  mockGet.mockImplementation((url: string) =>
+    Promise.resolve({
+      data: url.endsWith("/publication")
+        ? { status: "unpublished", current: null }
+        : url.endsWith("/publications")
+          ? { items: [], total: 0 }
+          : { url: "https://workflow.example/flow/flow" },
+    }),
+  );
   render(<PlatformAccessMenu />);
   fireEvent.click(screen.getByTestId("platform-access-menu-button"));
-  expect(screen.queryByText("设置为发布状态")).not.toBeInTheDocument();
+  expect(screen.queryByText("保存并发布")).not.toBeInTheDocument();
   expect(screen.queryByText("查看 API 调用配置")).not.toBeInTheDocument();
   await act(async () => fireEvent.click(screen.getByText("获取工作流链接")));
   expect(

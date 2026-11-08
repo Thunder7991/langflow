@@ -8,7 +8,7 @@ from inspect import getsource
 
 from fastapi import HTTPException
 
-from langflow.services.auth.platform_dry_run import parse_handle
+from langflow.services.auth.platform_dry_run import MAX_TEXT_BYTES, parse_handle
 
 # 原生供应商、MCP、任意代码与文件解析仍需各自的凭据/资源适配,不能因 run 权限绕过。
 REVIEWED = {
@@ -59,7 +59,7 @@ def prepared_graph(data, *, input_text=None):
         if raw.get("type") != "genericNode" or saved.get("tool_mode"):
             raise HTTPException(403, "Grouped and tool-mode nodes require separate runtime support")
         if kind == "PlatformModel":
-            canonical = platform_models.template()
+            canonical = platform_models.template(legacy="selection_mode" not in fields)
             if not platform_models.is_source(fields.get("code", {}).get("value")):
                 raise HTTPException(403, "Invalid platform model source")
             platform_models.configuration(fields)
@@ -100,6 +100,15 @@ def prepared_graph(data, *, input_text=None):
                 canonical["template"][field]["value"] = deepcopy(spec.get("value"))
         if "should_store_message" in canonical["template"]:
             canonical["template"]["should_store_message"]["value"] = False
+        if kind == "PlatformModel" and "selection_mode" in canonical["template"]:
+            # 原生参数处理会忽略隐藏字段;根据已验证的选择模式重新生成可见性,不能信任画布 show。
+            canonical["template"]["connection_model_id"]["show"] = (
+                canonical["template"]["selection_mode"]["value"] == "explicit"
+            )
+        if kind in {"TextInput", "ChatInput"}:
+            text = canonical["template"]["input_value"].get("value", "")
+            if not isinstance(text, str) or len(text.encode()) > MAX_TEXT_BYTES:
+                raise HTTPException(422, "Text input must be a string of at most 64 KiB")
         if input_text is not None and kind in {"TextInput", "ChatInput"}:
             canonical["template"]["input_value"]["value"] = input_text
         canonical["tool_mode"] = False
@@ -204,6 +213,12 @@ async def execute(data, *, flow_id, user_id, run_id, invoke):
                         results.append({"node_id": item.vertex.id, "text": value.text or ""})  # noqa: PERF401 - filter typed node results
         if len(json.dumps(results).encode()) > 256 * 1024:
             raise HTTPException(422, "Run output exceeds 256 KiB")
+    except Exception:
+        # LFX 可能把组件异常包装成图执行错误; 保留平台会话、权限及防重错误的真实状态。
+        if failure:
+            raise failure from None
+        raise
+    else:
         return results
     finally:
         runtime.reset(token)

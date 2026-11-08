@@ -56,6 +56,7 @@ from .trigger import (
 )
 from .user import User
 from .variable import Variable
+from .workflow_publication import WorkflowPublication, WorkflowPublicationRun, WorkflowPublicationState
 
 __all__ = [
     "A2ACheckpoint",
@@ -126,6 +127,9 @@ __all__ = [
     "TriggerSubscription",
     "User",
     "Variable",
+    "WorkflowPublication",
+    "WorkflowPublicationRun",
+    "WorkflowPublicationState",
     "decrypt_sso_client_secret",
     "encrypt_sso_client_secret",
     "is_sso_client_secret_envelope",

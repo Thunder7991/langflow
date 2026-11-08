@@ -232,6 +232,16 @@ async def prepare_node_refresh(request: Request, payload, flow_id: UUID | None, 
         class_name = "PlatformModelComponent"
     if class_name is None:
         raise HTTPException(403, "当前仅支持已审查的基础节点和平台模型; 通用文件解析、供应商模型和 MCP 节点尚未开放")
+    if (
+        class_name == "PlatformModelComponent"
+        and payload.field == "selection_mode"
+        and payload.field_value == "tenant_default"
+    ):
+        # 切回默认时先清除旧显式 ID; 原始表单可能已经更新 mode, 两者不能作为混合配置保存。
+        record = payload.template.get("connection_model_id")
+        if not isinstance(record, dict):
+            raise HTTPException(422, "企业模型记录字段缺失")
+        record["value"] = ""
     if payload.get_class_name() not in {None, class_name}:
         raise HTTPException(403, "Component class does not match trusted builtin")
 

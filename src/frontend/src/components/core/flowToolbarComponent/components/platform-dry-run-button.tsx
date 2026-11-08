@@ -13,6 +13,7 @@ import { buildFlowUpdatePayload } from "@/hooks/flows/save-payload";
 import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
+import type { WorkflowPublicationState } from "@/types/workflow-publication";
 import { extractApiErrorMessages } from "@/utils/apiError";
 
 type TextRun = {
@@ -20,6 +21,8 @@ type TextRun = {
   run_id: string;
   flow_id: string;
   version_token: string;
+  publication_id?: string;
+  publication_version?: number;
   outputs: { node_id: string; text: string }[];
 };
 
@@ -63,6 +66,14 @@ export default function PlatformDryRunButton({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TextRun | null>(null);
   const [error, setError] = useState("");
+  const [publication, setPublication] =
+    useState<WorkflowPublicationState | null>(null);
+  const [loadingPublication, setLoadingPublication] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const executionVersion =
+    action === "run" ? publication?.current?.id : version;
+  const executionDirty = action === "run" ? false : dirty;
+  const executionUsesModel = action === "run" ? false : usesModel;
   const waiting = useRef<AbortController | null>(null);
   const runId = useRef<string | null>(null);
   const canStop = useAuthStore(
@@ -77,8 +88,39 @@ export default function PlatformDryRunButton({
       setError("流程、版本或权限已变化，本次结果不再显示。");
     }
     setResult(null);
-  }, [owner, current?.id, version, canRun, dirty, sameFlow, usesModel]);
+  }, [
+    owner,
+    current?.id,
+    executionVersion,
+    canRun,
+    executionDirty,
+    sameFlow,
+    executionUsesModel,
+  ]);
   useEffect(() => () => waiting.current?.abort(), []);
+
+  useEffect(() => {
+    if (action !== "run" || !open || !sameFlow || !saved || !canRun) return;
+    const controller = new AbortController();
+    setPublication(null);
+    setLoadingPublication(true);
+    void api
+      .get<WorkflowPublicationState>(
+        `${getURL("PLATFORM_WORKFLOW", {}, true)}/flows/${encodeURIComponent(saved.id)}/publication`,
+        { signal: controller.signal },
+      )
+      .then((response) => {
+        if (!controller.signal.aborted) setPublication(response.data);
+      })
+      .catch((failure) => {
+        if (!controller.signal.aborted)
+          setError(extractApiErrorMessages(failure).join("；"));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingPublication(false);
+      });
+    return () => controller.abort();
+  }, [action, open, sameFlow, saved?.id, owner, canRun, refresh]);
 
   const handleOpen = (next: boolean) => {
     setOpen(next);
@@ -92,7 +134,15 @@ export default function PlatformDryRunButton({
   };
 
   const runSaved = async () => {
-    if (!sameFlow || !saved || !version || !canRun || dirty || busy) return;
+    if (
+      !sameFlow ||
+      !saved ||
+      !executionVersion ||
+      !canRun ||
+      executionDirty ||
+      busy
+    )
+      return;
     const actor = useAuthStore.getState();
     if (
       actor.userData?.id !== owner ||
@@ -114,7 +164,7 @@ export default function PlatformDryRunButton({
         action === "run" ? { run_id: runId.current } : {},
         {
           signal: controller.signal,
-          headers: { "If-Match": version },
+          headers: { "If-Match": executionVersion },
           timeout: usesModel || action === "run" ? 60000 : 15000,
         },
       );
@@ -124,10 +174,19 @@ export default function PlatformDryRunButton({
         latest.userData?.id !== owner ||
         !latest.platformWorkflowActions?.includes("read") ||
         !latest.platformWorkflowActions?.includes(action) ||
-        useFlowStore.getState().currentFlow?.id !== saved.id ||
-        useFlowsManagerStore.getState().currentFlow?.version_token !== version
+        useFlowStore.getState().currentFlow?.id !== saved.id
       )
         return;
+      if (
+        action !== "run" &&
+        useFlowsManagerStore.getState().currentFlow?.version_token !== version
+      ) {
+        // 读取最新修订可能早于 React 订阅刷新；丢弃旧结果时也必须给出可核对原因。
+        setError(
+          "运行期间草稿版本已变化，本次结果不再显示；请核对版本后再运行。",
+        );
+        return;
+      }
       if ((response.data as { status: string }).status === "cancelled") {
         setError("服务端执行已取消；已发出的模型请求仍可能产生费用。");
         return;
@@ -136,7 +195,8 @@ export default function PlatformDryRunButton({
         response.data.status !== "succeeded" ||
         (action === "run" && response.data.run_id !== runId.current) ||
         response.data.flow_id !== saved.id ||
-        response.data.version_token !== version
+        response.data.version_token !== executionVersion ||
+        (action === "run" && response.data.publication_id !== executionVersion)
       )
         throw new Error("未能确认本次运行结果，请核对保存版本后再试。");
       setResult(response.data);
@@ -150,19 +210,31 @@ export default function PlatformDryRunButton({
             response?: { data?: { detail?: { code?: string } } };
           }
         ).response?.data?.detail?.code === "platform_model_run_accepted";
+      const workflowAlreadyAccepted =
+        (failure as { response?: { data?: { detail?: { code?: string } } } })
+          .response?.data?.detail?.code === "workflow_run_accepted";
+      const modelState = (
+        failure as { response?: { data?: { detail?: { code?: string } } } }
+      ).response?.data?.detail?.code;
       setError(
-        status === 409 && runAlreadyAccepted
-          ? "本次模型运行已受理，结果可能未知。请勿自动重试；核对后再发起新运行。"
-          : status === 409
-            ? "服务端流程版本已变化，请先加载最新版本再运行；当前草稿保留。"
-            : status === 429
-              ? "当前已有一次调试正在执行，请稍后重试。"
-              : usesModel &&
-                  (status === 502 || status === 503 || status === 504)
-                ? "平台模型调试失败或结果未知，重复运行可能再次计费；本次请求不会自动重试。"
-                : status === 504
-                  ? "受控调试超时。模型调用结果可能未知，请核对后再发起新运行。"
-                  : extractApiErrorMessages(failure).join("；"),
+        status === 409 &&
+          (modelState === "TENANT_DEFAULT_UNSET" ||
+            modelState === "MODEL_UNAVAILABLE")
+          ? extractApiErrorMessages(failure).join("；")
+          : status === 409 && workflowAlreadyAccepted
+            ? "本次运行 ID 已受理，结果可能未知。请查询原运行，不要自动重试。"
+            : status === 409 && runAlreadyAccepted
+              ? "本次模型运行已受理，结果可能未知。请勿自动重试；核对后再发起新运行。"
+              : status === 409
+                ? "服务端流程版本已变化，请先加载最新版本再运行；当前草稿保留。"
+                : status === 429
+                  ? "当前已有一次调试正在执行，请稍后重试。"
+                  : usesModel &&
+                      (status === 502 || status === 503 || status === 504)
+                    ? "平台模型调试失败或结果未知，重复运行可能再次计费；本次请求不会自动重试。"
+                    : status === 504
+                      ? "受控调试超时。模型调用结果可能未知，请核对后再发起新运行。"
+                      : extractApiErrorMessages(failure).join("；"),
       );
     } finally {
       if (waiting.current === controller) {
@@ -197,8 +269,8 @@ export default function PlatformDryRunButton({
             action === "run" ? "platform-run-button" : "platform-dry-run-button"
           }
           variant="ghost"
-          disabled={!canRun || !sameFlow || !version}
-          title={!canRun ? "需要工作流调试权限" : "运行已保存的受控流程"}
+          disabled={!canRun || !sameFlow || (action !== "run" && !version)}
+          title={action === "run" ? "运行当前线上发布版本" : "运行已保存的草稿"}
           onClick={() => handleOpen(true)}
         >
           {label}
@@ -210,14 +282,22 @@ export default function PlatformDryRunButton({
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>
               {action === "run"
-                ? "运行已保存的基础节点和平台模型图，支持多个节点与分支，限时 45 秒。原生供应商、工具、文件解析、循环和 MCP 需要独立适配。"
+                ? "运行当前线上发布快照，限时 45 秒。保存草稿不会改变线上版本；再次发布不改变已受理的任务。"
                 : usesModel
                   ? "仅支持文本输入 → 平台模型 → 文本输出，运行已保存版本。模型连接需有凭据使用权限及 secret_use 能力，供应商调用限时 30 秒，不自动重试。"
                   : "仅支持文本输入 → 文本输出，运行已保存版本，执行阶段限时 10 秒。"}
               文件解析、工具调用和 MCP 尚未开放。
             </DialogDescription>
           </DialogHeader>
-          {dirty && (
+          {loadingPublication && <p role="status">正在读取线上版本…</p>}
+          {action === "run" && publication && (
+            <p role="status">
+              {publication.current
+                ? `本次将运行线上版本 V${publication.current.version_number}`
+                : "流程未发布或已下线，请先发布后再进行业务运行。"}
+            </p>
+          )}
+          {dirty && action !== "run" && (
             <p role="status">画布有未保存的图变化，请先保存后再运行。</p>
           )}
           {!canRun && (
@@ -225,10 +305,16 @@ export default function PlatformDryRunButton({
           )}
           {canRun && (
             <Button
-              disabled={!sameFlow || !version || dirty || busy}
+              disabled={
+                !sameFlow ||
+                !executionVersion ||
+                executionDirty ||
+                busy ||
+                loadingPublication
+              }
               onClick={runSaved}
             >
-              运行已保存版本
+              {action === "run" ? "开始运行" : "运行已保存版本"}
             </Button>
           )}
           {busy && action === "run" && canStop && (
@@ -242,9 +328,25 @@ export default function PlatformDryRunButton({
             </p>
           )}
           {error && <p role="alert">{error}</p>}
+          {action === "run" && !busy && (
+            <Button
+              variant="outline"
+              disabled={loadingPublication}
+              onClick={() => {
+                setError("");
+                setRefresh(refresh + 1);
+              }}
+            >
+              更新状态
+            </Button>
+          )}
           {result && (
             <div className="space-y-3">
-              <p role="status">运行成功，结果来自本次运行的已保存版本。</p>
+              <p role="status">
+                {action === "run"
+                  ? `运行成功，结果来自发布版本 V${result.publication_version}。`
+                  : "运行成功，结果来自本次运行的已保存版本。"}
+              </p>
               {result.outputs.map((output) => (
                 <pre
                   key={output.node_id}

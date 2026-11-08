@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { APIClassType } from "@/types/api";
 import Dropdown from "../index";
@@ -9,7 +9,8 @@ interface MockChildrenProps {
 
 interface MockCommandItemProps {
   children: ReactNode;
-  onSelect?: () => void;
+  value?: string;
+  onSelect?: (value: string) => void;
 }
 
 interface MockButtonProps extends Record<string, unknown> {
@@ -120,8 +121,8 @@ jest.mock("@/components/ui/button", () => ({
 jest.mock("@/components/ui/command", () => ({
   Command: ({ children }: MockChildrenProps) => <div>{children}</div>,
   CommandGroup: ({ children }: MockChildrenProps) => <div>{children}</div>,
-  CommandItem: ({ children, onSelect }: MockCommandItemProps) => (
-    <div onClick={onSelect}>{children}</div>
+  CommandItem: ({ children, onSelect, value }: MockCommandItemProps) => (
+    <div onClick={() => onSelect?.(value ?? "")}>{children}</div>
   ),
   CommandList: ({ children }: MockChildrenProps) => <div>{children}</div>,
   CommandSeparator: () => <hr />,
@@ -209,6 +210,87 @@ describe("Dropdown accessible name", () => {
     // aria-labelledby that would override it.
     expect(screen.getByTestId("model-dropdown")).not.toHaveAttribute(
       "aria-labelledby",
+    );
+  });
+});
+
+describe("Enterprise model labels and persisted selections", () => {
+  const models = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+  ];
+  const metadata = [
+    { description: "企业渠道 · 对话模型一 (company-one)" },
+    { description: "企业渠道 · 对话模型二 (company-two)" },
+  ];
+  const nodeInformationMetadata = {
+    flowId: "flow-one",
+    nodeType: "platformmodel",
+    flowName: "Enterprise flow",
+    isAuth: false,
+    variableName: "connection_model_id",
+  };
+
+  it("shows real model names and submits the selected record ID", () => {
+    const onSelect = jest.fn();
+    render(
+      <Dropdown
+        {...baseProps}
+        name="connection_model_id"
+        nodeInformationMetadata={nodeInformationMetadata}
+        value={models[0]}
+        options={models}
+        optionsMetaData={metadata}
+        onSelect={onSelect}
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveTextContent(
+      metadata[0].description,
+    );
+    expect(screen.getByRole("combobox")).not.toHaveTextContent(models[0]);
+    fireEvent.click(screen.getByText(metadata[1].description, { exact: true }));
+    expect(onSelect).toHaveBeenCalledWith(
+      models[1],
+      undefined,
+      undefined,
+      metadata[1],
+    );
+  });
+
+  it.each([
+    ["tenant_default", "跟随企业默认模型"],
+    ["explicit", "指定企业模型"],
+  ])("labels mode %s without changing its stored value", (value, label) => {
+    render(
+      <Dropdown
+        {...baseProps}
+        name="selection_mode"
+        nodeInformationMetadata={nodeInformationMetadata}
+        value={value}
+        options={["tenant_default", "explicit"]}
+        optionsMetaData={[
+          { description: "跟随企业默认模型" },
+          { description: "指定企业模型" },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveTextContent(label);
+  });
+
+  it("preserves other dropdowns with description metadata", () => {
+    render(
+      <Dropdown
+        {...baseProps}
+        value="gpt-4"
+        options={["gpt-4"]}
+        optionsMetaData={[
+          { description: "This remains supplemental metadata" },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("combobox")).toHaveTextContent("gpt-4");
+    expect(screen.getByRole("combobox")).not.toHaveTextContent(
+      "supplemental metadata",
     );
   });
 });

@@ -174,7 +174,7 @@ async def execute_model_chain(source_id, target_id, text, model_id, configuratio
     from lfx.components.input_output.text_output import TextOutputComponent
     from lfx.graph import Graph
 
-    from langflow.services.auth.platform_model_component import PlatformModelComponent
+    from langflow.services.auth import platform_model_component, platform_model_legacy_component
     from langflow.services.auth.platform_models import runtime
 
     platform_failure = None
@@ -189,7 +189,8 @@ async def execute_model_chain(source_id, target_id, text, model_id, configuratio
 
     start = TextInputComponent(_id=source_id)
     start.set(input_value=text, use_global_variable=False)
-    model = PlatformModelComponent(_id=model_id)
+    module = platform_model_component if "selection_mode" in configuration else platform_model_legacy_component
+    model = module.PlatformModelComponent(_id=model_id)
     model.set(input_value=start.text_response, **configuration)
     end = TextOutputComponent(_id=target_id)
     end.set(input_value=model.text_response)

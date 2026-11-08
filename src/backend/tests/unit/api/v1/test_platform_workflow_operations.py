@@ -9,6 +9,19 @@ import pytest
 from tests.unit.api.v1.test_platform_sso_editing import GRAPH, create, editor, isolated_auth_configuration  # noqa: F401
 
 
+async def publish_for_run(client, flow, live):
+    original = live["actions"][:]
+    live["actions"] += ["publish"]
+    response = await client.post(
+        f"/api/v2/platform-workflow/flows/{flow['id']}/publish",
+        json={"published": True, "publication_token": None},
+        headers={"If-Match": flow["version_token"]},
+    )
+    live["actions"] = original
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 async def test_delete_is_independent_from_editing_and_enforced_by_api(editor):
     client, _, live = editor
     flow = await create(client)
@@ -132,8 +145,9 @@ async def test_general_run_accepts_saved_graph_input_and_checks_version(editor):
     flow = await text_flow(client, "saved")
     live["actions"] = ["read", "run"]
     path = f"/api/v2/platform-workflow/flows/{flow['id']}/run"
-    assert (await client.post(path, json={})).status_code == 428
-    response = await client.post(path, json={"input": "runtime"}, headers={"If-Match": flow["version_token"]})
+    assert (await client.post(path, json={})).status_code == 409
+    publication = await publish_for_run(client, flow, live)
+    response = await client.post(path, json={"input": "runtime"}, headers={"If-Match": publication["current"]["id"]})
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "succeeded"
     assert {"node_id": "TextOutput-b5", "text": "runtime"} in response.json()["outputs"]
@@ -155,6 +169,8 @@ async def test_general_model_graph_uses_platform_bridge_and_server_edge_types(ed
     async def gateway(action, body, _settings):
         if action == "catalog":
             return {"connections": [{"id": CONNECTION, "name": "test", "provider": "openai_compatible"}], "models": []}
+        if action in {"sync-references", "references"}:
+            return {"registered": True}
         assert action == "invoke"
         assert body["connectionId"] == CONNECTION
         assert body["input"] == "saved question"
@@ -164,11 +180,11 @@ async def test_general_model_graph_uses_platform_bridge_and_server_edge_types(ed
 
     monkeypatch.setattr(platform_models, "call", gateway)
     flow = await model_flow(client)
+    await publish_for_run(client, flow, live)
     live["actions"] = ["read", "run"]
     response = await client.post(
         f"/api/v2/platform-workflow/flows/{flow['id']}/run",
         json={},
-        headers={"If-Match": flow["version_token"]},
     )
     assert response.status_code == 200, response.text
     assert {"node_id": "TextOutput-b5", "text": "platform answer"} in response.json()["outputs"]
@@ -213,10 +229,9 @@ async def test_general_prompt_graph_can_branch_to_multiple_outputs(editor):
     )
     assert response.status_code == 200, response.text
     saved = response.json()
+    await publish_for_run(client, saved, live)
     live["actions"] = ["read", "run"]
-    result = await client.post(
-        f"/api/v2/platform-workflow/flows/{flow['id']}/run", json={}, headers={"If-Match": saved["version_token"]}
-    )
+    result = await client.post(f"/api/v2/platform-workflow/flows/{flow['id']}/run", json={})
     assert result.status_code == 200, result.text
     outputs = result.json()["outputs"]
     assert {"node_id": "TextOutput-b5", "text": "Result: hello"} in outputs
@@ -236,18 +251,21 @@ def test_malformed_graph_is_rejected_as_input_error(data):
 
 
 async def test_publish_can_be_reversed_and_does_not_prevent_owner_editing(editor):
+    from tests.unit.api.v2.test_platform_dry_run import text_flow
+
     client, _, live = editor
-    flow = await create(client)
+    flow = await text_flow(client)
+    state = await publish_for_run(client, flow, live)
     live["actions"] += ["publish", "share", "api_access"]
     path = f"/api/v2/platform-workflow/flows/{flow['id']}"
-    response = await client.post(f"{path}/publish", json={"published": True})
-    assert response.status_code == 200, response.text
-    assert response.json()["access_type"] == "PUBLIC"
     assert (await client.patch(f"/api/v1/flows/{flow['id']}", json={"name": "published-edit"})).status_code == 200
     assert (await client.get(f"{path}/share")).json()["authentication"] == "platform_sso"
     assert (await client.get(f"{path}/api")).json()["required_action"] == "run"
-    response = await client.post(f"{path}/publish", json={"published": False})
-    assert response.json()["access_type"] == "PRIVATE"
+    response = await client.post(
+        f"{path}/publish", json={"published": False, "publication_token": state["publication_token"]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "offline"
 
 
 async def test_stop_cancels_the_owned_server_task_without_granting_other_operations(editor, monkeypatch):
@@ -259,6 +277,7 @@ async def test_stop_cancels_the_owned_server_task_without_granting_other_operati
 
     client, _, live = editor
     flow = await text_flow(client)
+    await publish_for_run(client, flow, live)
     live["actions"] = ["read", "run", "stop"]
     entered = asyncio.Event()
 
@@ -269,9 +288,7 @@ async def test_stop_cancels_the_owned_server_task_without_granting_other_operati
     monkeypatch.setattr(platform_execution, "execute", blocked)
     run_id = str(uuid4())
     path = f"/api/v2/platform-workflow/flows/{flow['id']}"
-    task = asyncio.create_task(
-        client.post(f"{path}/run", json={"run_id": run_id}, headers={"If-Match": flow["version_token"]})
-    )
+    task = asyncio.create_task(client.post(f"{path}/run", json={"run_id": run_id}))
     await asyncio.wait_for(entered.wait(), 5)
     live["actions"] = ["read", "run"]
     assert (await client.post(f"{path}/runs/{run_id}/stop", json={})).status_code == 403
@@ -280,6 +297,10 @@ async def test_stop_cancels_the_owned_server_task_without_granting_other_operati
     assert response.status_code == 200, response.text
     assert (await asyncio.wait_for(task, 5)).json()["status"] == "cancelled"
     assert not platform_execution.ACTIVE
+    record = await client.get(f"{path}/runs/{run_id}")
+    assert record.status_code == 200, record.text
+    assert record.json()["status"] == "cancelled"
+    assert record.json()["finished_at"] is not None
 
 
 async def test_full_action_grants_do_not_allow_other_users_resources(editor):
@@ -323,7 +344,11 @@ async def test_execution_accepts_handles_saved_by_react_canvas(editor, operation
         if operation == "run"
         else f"/api/v2/platform-flows/{flow['id']}/dry-run"
     )
-    result = await client.post(path, json={}, headers={"If-Match": saved.json()["version_token"]})
+    if operation == "run":
+        await publish_for_run(client, saved.json(), live)
+    result = await client.post(
+        path, json={}, headers={} if operation == "run" else {"If-Match": saved.json()["version_token"]}
+    )
     assert result.status_code == 200, result.text
     assert {"node_id": "TextOutput-b5", "text": "canvas wire format"} in result.json()["outputs"]
 

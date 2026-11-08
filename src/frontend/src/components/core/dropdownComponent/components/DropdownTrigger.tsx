@@ -18,6 +18,7 @@ export function DropdownTrigger({
   refButton,
   id,
   value,
+  selectedLabel,
   options,
   placeholder,
   helperText,
@@ -36,6 +37,7 @@ export function DropdownTrigger({
   refButton: RefObject<HTMLButtonElement | null>;
   id: string;
   value: string;
+  selectedLabel?: string;
   options?: string[];
   placeholder?: string;
   helperText?: string;
@@ -100,7 +102,7 @@ export function DropdownTrigger({
                 <>
                   {
                     options?.includes(value) ? (
-                      value
+                      selectedLabel || value
                     ) : // this logic is used for the agents component, if you update make sure to test the agent component
                     sourceOptions?.fields?.data?.node?.name ===
                       "connect_other_models" ? (

@@ -51,14 +51,15 @@ def resolve_component_code_for_action(
     except CatalogPolicyIdentityUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
-    from langflow.services.auth.platform_models import is_source, source
+    from langflow.services.auth.platform_models import is_source
 
     if is_source(code):
         # 固定平台表单不包含网络/凭据; 执行只能由专用路由注入上下文。
         enforce_catalog_policy_for_component_type("PlatformModel", snapshot=snapshot)
         enforce_catalog_policy_for_component_type("platform.PlatformModel", snapshot=snapshot)
         enforce_catalog_policy_for_component_type("PlatformModelComponent", snapshot=snapshot)
-        return source()
+        # 历史固定组件仍使用旧选择字段;不能把源码静默换成新契约后丢失配置。
+        return code.strip() + "\n"
 
     admin_only = getattr(settings, "custom_component_admin_only", False) is True and not user.is_superuser
     custom_code_disabled = not getattr(settings, "allow_custom_components", True)

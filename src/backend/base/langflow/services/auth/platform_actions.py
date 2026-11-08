@@ -61,6 +61,10 @@ def route_action(method: str, path: str) -> str | None:
         ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/export", "export"),
         ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/versions/{UUID_PATTERN}/export", "version_export"),
         ("POST", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/publish", "publish"),
+        ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/publication", "read"),
+        ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/publications", "read"),
+        ("POST", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/publications/{UUID_PATTERN}/activate", "publish"),
+        ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/runs/{UUID_PATTERN}", "run"),
         ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/share", "share"),
         ("GET", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/api", "api_access"),
         ("POST", rf"/api/v2/platform-workflow/flows/{UUID_PATTERN}/run", "run"),
@@ -100,7 +104,7 @@ async def check_native_owner(path: str, user_id: str, actions: list[str], method
             raise HTTPException(403, "Only personal unmanaged projects can be updated")
 
 
-async def validate_graph_references(request, session, data, user_id):
+async def validate_graph_references(request, session, data, user_id, *, require_model_use=False):
     from langflow.services.auth.platform_files import validate_references
     from langflow.services.auth.platform_models import validate_references as validate_models
     from langflow.services.auth.platform_workflows import context, validate_graph
@@ -109,4 +113,4 @@ async def validate_graph_references(request, session, data, user_id):
         return
     verified = await validate_references(request, session, data, user_id)
     validate_graph(data, verified_files=verified)
-    await validate_models(request, data)
+    await validate_models(request, data, require_use=require_model_use)

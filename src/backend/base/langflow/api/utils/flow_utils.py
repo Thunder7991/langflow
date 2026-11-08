@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from lfx.graph.graph.base import Graph
 from lfx.services.deps import session_scope
 from sqlalchemy import delete
-from sqlmodel import col, select
+from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from langflow.api.utils.execution_principal import stamp_execution_principal
@@ -139,8 +139,16 @@ async def cascade_delete_flow(
         raise HTTPException(status_code=400, detail="UUID5 flow IDs are reserved for public execution histories.")
     # Imported lazily so this module (loaded early, via ``api.utils``) stays free
     # of the memory-base service import chain.
+    from langflow.services.database.models.workflow_publication import WorkflowPublication
     from langflow.services.knowledge_base_storage.runtime import StorageUnavailableError
     from langflow.services.memory_base.flow_cleanup import purge_flow_memory_bases
+
+    # 首期保留全部发布历史。保护放在公共删除入口, 覆盖单删、批删和项目级联删除。
+    await session.exec(update(Flow).where(Flow.id == flow_id).values(version_token=Flow.version_token))
+    if (
+        await session.exec(select(WorkflowPublication.id).where(WorkflowPublication.flow_id == flow_id).limit(1))
+    ).first():
+        raise HTTPException(409, "流程包含保留的发布历史, 首期不开放删除, 请先下线并保留审计记录。")
 
     try:
         await check_flow_has_deployed_versions(session, flow_id=flow_id)

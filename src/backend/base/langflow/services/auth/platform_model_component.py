@@ -7,26 +7,30 @@ from lfx.schema.message import Message
 
 class PlatformModelComponent(Component):
     display_name = "平台模型"
-    description = "由 deep_agents 校验权限并调用租户模型连接。密钥不会进入流程。"
+    description = "使用企业默认模型或指定企业模型记录,由平台校验权限并代调用。"
     name = "PlatformModel"
     icon = "BrainCircuit"
     inputs = [
         MessageTextInput(name="input_value", display_name="输入文本"),
         DropdownInput(
-            name="connection_id",
-            display_name="平台模型连接",
-            options=[],
-            refresh_button=True,
+            name="selection_mode",
+            display_name="模型选择",
+            options=["tenant_default", "explicit"],
+            options_metadata=[{"description": "跟随企业默认模型"}, {"description": "指定企业模型"}],
+            value="tenant_default",
             real_time_refresh=True,
-            info="刷新读取有权查看的租户模型连接。选项值为连接 ID。",
+            refresh_button=True,
+            info="跟随默认在每次执行时解析;指定模型保存企业模型记录 ID。",
         ),
         DropdownInput(
-            name="model_name",
-            display_name="模型名称",
+            name="connection_model_id",
+            display_name="企业模型",
             options=[],
-            combobox=True,
+            value="",
+            show=False,
             refresh_button=True,
-            info="选择平台目录中的模型或填写连接支持的模型名称。更换连接后请核对模型名称。",
+            real_time_refresh=True,
+            info="仅显示当前身份有权查看的已启用企业模型;模型与渠道由平台统一管理。",
         ),
         SliderInput(
             name="temperature", display_name="Temperature", value=0, range_spec={"min": 0, "max": 2, "step": 0.1}
@@ -40,6 +44,12 @@ class PlatformModelComponent(Component):
 
         # 仅由专用已保存版本执行器注入调用上下文, 原生运行没有上下文时一律拒绝。
         text = await invoke_current(
-            self.connection_id, self.model_name, self.input_value, self.temperature, self.max_tokens
+            "",
+            "",
+            self.input_value,
+            self.temperature,
+            self.max_tokens,
+            selection_mode=self.selection_mode,
+            connection_model_id=self.connection_model_id,
         )
         return Message(text=text)

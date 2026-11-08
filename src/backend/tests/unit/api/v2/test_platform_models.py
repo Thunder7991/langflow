@@ -26,7 +26,9 @@ async def test_platform_node_is_available_without_exposing_any_service_credentia
 
 async def model_flow(client):
     flow = await text_flow(client, "saved question")
-    definition = await builtin(client, "PlatformModel")
+    from langflow.services.auth.platform_models import template
+
+    definition = template(legacy=True)
     for name, value in {
         "connection_id": CONNECTION,
         "model_name": "company-model",
@@ -67,13 +69,19 @@ def gateway(monkeypatch):
     calls = []
 
     async def call(action, body, _settings):
+        if action == "sync-references":
+            return {"registered": True}
         assert body["grant"] == "g" * 43
         calls.append((action, body))
         if action == "catalog":
+            if body.get("catalogVersion") == 2:
+                return {"defaultConnectionModelId": None, "defaultState": "unset", "items": []}
             return {
                 "connections": [{"id": CONNECTION, "name": "我的模型", "provider": "openai_compatible"}],
                 "models": [],
             }
+        if action == "references":
+            return {"registered": True}
         assert action == "invoke"
         assert body["connectionId"] == CONNECTION
         assert body["input"] == "saved question"
@@ -86,6 +94,7 @@ def gateway(monkeypatch):
             "flowId",
             "versionToken",
             "runId",
+            "executionId",
             "temperature",
             "maxTokens",
         }
@@ -115,6 +124,9 @@ async def test_saved_model_graph_executes_via_platform_and_preserves_version(edi
     assert result.status_code == 200, result.text
     assert result.json()["outputs"] == [{"node_id": "TextOutput-b5", "text": "受控平台回答"}]
     assert len([action for action, _ in gateway if action == "invoke"]) == 1
+    invocation = next(body for action, body in gateway if action == "invoke")
+    assert invocation["executionId"] == result.json()["run_id"]
+    assert invocation["runId"] != result.json()["run_id"]
     restored = (await client.get(f"/api/v1/flows/{flow['id']}")).json()
     assert restored["data"] == flow["data"]
     assert restored["version_token"] == flow["version_token"]
@@ -130,7 +142,9 @@ async def test_model_catalog_permission_and_refresh_do_not_execute_model(editor,
     result = await client.get("/api/v2/platform-models")
     assert result.status_code == 200, result.text
     flow = await create(client)
-    node = await builtin(client, "PlatformModel")
+    from langflow.services.auth.platform_models import template
+
+    node = template(legacy=True)
     refreshed = await client.post(
         "/api/v1/custom_component/update",
         params={"flow_id": flow["id"]},
