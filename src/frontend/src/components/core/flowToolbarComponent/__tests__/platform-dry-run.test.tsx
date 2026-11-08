@@ -10,6 +10,7 @@ import { api } from "@/controllers/API/api";
 import useAuthStore from "@/stores/authStore";
 import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
+import PlatformDryRunButton from "../components/platform-dry-run-button";
 import PlaygroundButton from "../components/playground-button";
 
 const render = (ui: React.ReactElement) =>
@@ -60,14 +61,18 @@ afterEach(() =>
   useAuthStore.setState({ userData: null, platformWorkflowActions: null }),
 );
 
-it("keeps existing debug and run actions while adding the Playground entry", () => {
+it("keeps Playground as the primary entry without standalone debug and run buttons", () => {
   useAuthStore.setState({
     platformWorkflowActions: ["read", "dry_run", "run"],
   });
   render(<PlaygroundButton hasIO />);
   expect(screen.getByRole("button", { name: "Playground" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "纯文本调试" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "工作流运行" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "纯文本调试" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "工作流运行" }),
+  ).not.toBeInTheDocument();
 });
 
 it("runs and stops through independent platform actions using the same run ID", async () => {
@@ -80,7 +85,7 @@ it("runs and stops through independent platform actions using the same run ID", 
           finish = resolve;
         }),
   );
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton action="run" />);
   expect(
     screen.queryByRole("button", { name: "纯文本调试" }),
   ).not.toBeInTheDocument();
@@ -118,7 +123,7 @@ it("runs the saved version with no posted graph and renders escaped output", asy
       outputs: [{ node_id: "out", text: "<b>result</b>" }],
     },
   });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   expect(await screen.findByText("<b>result</b>")).toBeInTheDocument();
@@ -134,7 +139,7 @@ it("runs the saved version with no posted graph and renders escaped output", asy
 
 it("does not derive run permission from editing and prevents unsaved graph execution", async () => {
   useAuthStore.setState({ platformWorkflowActions: ["read", "update"] });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   expect(
     screen.queryByRole("button", { name: "纯文本调试" }),
   ).not.toBeInTheDocument();
@@ -169,7 +174,7 @@ it("aborts waiting and rejects a late result after run permission is revoked", a
         finish = resolve;
       }),
   );
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   const signal = (api.post as jest.Mock).mock.calls[0][2].signal as AbortSignal;
@@ -189,7 +194,7 @@ it("shows a failed response without a fabricated success or clearing the saved c
     platformWorkflow: true,
     response: { status: 403, data: { detail: "revoked" } },
   });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("权限");
@@ -200,7 +205,7 @@ it("shows a failed response without a fabricated success or clearing the saved c
 
 it("requires a known owner and read access even when dry_run is present", () => {
   useAuthStore.setState({ platformWorkflowActions: ["dry_run"] });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   expect(
     screen.queryByRole("button", { name: "纯文本调试" }),
   ).not.toBeInTheDocument();
@@ -225,7 +230,7 @@ it("distinguishes an already accepted model run from a saved-version conflict", 
       data: { detail: { code: "platform_model_run_accepted" } },
     },
   });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -259,7 +264,7 @@ it("runs a saved platform model graph without sending credentials or model overr
       outputs: [{ node_id: "out", text: "平台模型输出" }],
     },
   });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "平台模型调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   expect(await screen.findByText("平台模型输出")).toBeInTheDocument();
@@ -281,7 +286,7 @@ it("warns that an uncertain model failure can still be billed", async () => {
     nodes: nodes as never,
   });
   (api.post as jest.Mock).mockRejectedValue({ response: { status: 502 } });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "平台模型调试" }));
   fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -300,7 +305,7 @@ it.each([
     (api.post as jest.Mock).mockRejectedValue({
       response: { status: 409, data: { detail: { code, message } } },
     });
-    const view = render(<PlaygroundButton hasIO />);
+    const view = render(<PlatformDryRunButton />);
     fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
     fireEvent.click(screen.getByRole("button", { name: "运行已保存版本" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
@@ -319,7 +324,7 @@ it("explains a discarded response when the saved revision changes before the ren
       outputs: [{ node_id: "out", text: "outdated private result" }],
     },
   });
-  const view = render(<PlaygroundButton hasIO />);
+  const view = render(<PlatformDryRunButton />);
   fireEvent.click(screen.getByRole("button", { name: "纯文本调试" }));
   const state = useFlowsManagerStore.getState();
   const latest = jest.spyOn(useFlowsManagerStore, "getState").mockReturnValue({

@@ -3,6 +3,7 @@ import useFlowStore from "@/stores/flowStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
 import DeployButton from "./deploy-button";
 import PublishDropdown from "./deploy-dropdown";
+import PlatformMoreMenu from "./platform-more-menu";
 import PlaygroundButton from "./playground-button";
 
 type FlowToolbarOptionsProps = {
@@ -35,6 +36,7 @@ const FlowToolbarOptions = ({
           openApiModal={openApiModal}
           setOpenApiModal={setOpenApiModal}
         />
+        <PlatformMoreMenu />
         <DeployButton />
       </div>
     </PermissionsProvider>

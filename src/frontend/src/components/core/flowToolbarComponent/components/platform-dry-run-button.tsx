@@ -28,8 +28,16 @@ type TextRun = {
 
 export default function PlatformDryRunButton({
   action = "dry_run",
+  open: controlledOpen,
+  onOpenChange,
+  onCloseAutoFocus,
+  showTrigger = true,
 }: {
   action?: "dry_run" | "run";
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+  showTrigger?: boolean;
 }) {
   const owner = useAuthStore((state) => state.userData?.id);
   const canRun = useAuthStore(
@@ -62,7 +70,8 @@ export default function PlatformDryRunButton({
       live: { nodes, edges },
       userEdited: edited,
     }).data !== undefined;
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TextRun | null>(null);
   const [error, setError] = useState("");
@@ -123,7 +132,8 @@ export default function PlatformDryRunButton({
   }, [action, open, sameFlow, saved?.id, owner, canRun, refresh]);
 
   const handleOpen = (next: boolean) => {
-    setOpen(next);
+    if (controlledOpen === undefined) setOpen(next);
+    onOpenChange?.(next);
     if (!next) {
       waiting.current?.abort();
       waiting.current = null;
@@ -262,7 +272,7 @@ export default function PlatformDryRunButton({
 
   return (
     <>
-      {canRun && (
+      {canRun && showTrigger && (
         <Button
           size="sm"
           data-testid={
@@ -277,7 +287,10 @@ export default function PlatformDryRunButton({
         </Button>
       )}
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+        <DialogContent
+          className="max-h-[80vh] max-w-2xl overflow-y-auto"
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>

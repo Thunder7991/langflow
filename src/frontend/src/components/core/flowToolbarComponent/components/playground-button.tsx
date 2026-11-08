@@ -6,7 +6,6 @@ import { usePermissions } from "@/contexts/permissionsContext";
 import { PLATFORM_UNAVAILABLE_REASON } from "@/customization/utils/platform-workflow-ui";
 import useAuthStore from "@/stores/authStore";
 import useFlowsManagerStore from "@/stores/flowsManagerStore";
-import PlatformDryRunButton from "./platform-dry-run-button";
 
 interface PlaygroundButtonProps {
   hasIO: boolean;
@@ -53,8 +52,6 @@ const PlaygroundButton = ({ hasIO }: PlaygroundButtonProps) => {
             <span>Playground</span>
           </SimpleSidebarTrigger>
         )}
-        <PlatformDryRunButton />
-        <PlatformDryRunButton action="run" />
       </>
     );
 
